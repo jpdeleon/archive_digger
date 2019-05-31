@@ -1,0 +1,124 @@
+#!/usr/bin/env python
+from os.path import exists, isdir, join
+from os import makedirs
+import argparse
+import logging
+from imp import reload
+import sys
+sys.path.append('..')
+import archive_digger as ad
+
+import numpy as np
+from astropy.coordinates import SkyCoord
+from astropy import units as u
+from tqdm import tqdm
+
+N = range(len(ad.ALL_DATA_PRODUCTS))
+parser = argparse.ArgumentParser(description="""
+                parse RV data from {}""".format(ad.URL),
+                usage='use "%(prog)s --help" for more information',
+                formatter_class=argparse.RawTextHelpFormatter)
+parser.add_argument('-ra', help='R.A. [deg]', type=float, default=None)
+parser.add_argument('-dec', help='Dec. [deg]', type=float, default=None)
+parser.add_argument('-p', '--pipeline', help='RV pipeline:\n{}'.format(np.c_[N,ad.ALL_DATA_PRODUCTS]), 
+                    choices=N, type=int, default=None)
+parser.add_argument('-d', '--distance', help='distance criterion [arcsec]', default=1, type=float)
+parser.add_argument('-c', '--clobber', help='clobber database (default=False)',
+    action='store_true', default=False)
+parser.add_argument('-o', '--outdir', help='output directory', default=None)
+parser.add_argument('-s', '--save', help='save figure (default=False)',
+    action='store_true', default=False)
+parser.add_argument('-toi', help='toi', type=float, default=None)
+parser.add_argument('-tic', help='tic', type=int, default=None)
+parser.add_argument('-v', '--verbose', help='verbose (default=True)',
+    action='store_false', default=True)
+parser.add_argument('-a', '--save_all', help='save all available data (default=False)',
+    action='store_true', default=False)
+parser.add_argument('-fov', help='plot FOV only', action='store_true', default=False)
+
+args = parser.parse_args()
+ra   = args.ra
+dec  = args.dec
+ncol  = args.pipeline
+outdir = args.outdir
+dist = args.distance
+verbose = args.verbose
+clobber = args.clobber
+toi = args.toi
+tic = args.tic
+show_fov = args.fov
+save_all = args.save_all
+
+#LOG_FILENAME   = join(outdir,'query_harps.log')
+#reload(logging)
+#logging.basicConfig(filename=LOG_FILENAME ,level=logging.DEBUG)
+
+if __name__=='__main__':    
+    #if (ra is None) and (dec is None):
+    #    #test
+    #    print('===TEST RUN===\n')
+    #    ra = 289.2
+    #    dec= 5.2921
+    
+    if ra and dec:
+        target_coord = SkyCoord(ra=ra, dec=dec, unit=(u.deg, u.deg))
+    
+    elif tic or toi:
+        q = ad.query_toi(toi=toi, tic=tic, clobber=clobber)
+        r = q['RA'].values[0]
+        d = q['Dec'].values[0]
+        target_coord = SkyCoord(ra=r, dec=d, unit=(u.hourangle, u.deg))
+    
+    else:
+        print('Supply [ra,dec] or [tic] or [toi]')
+        sys.exit()
+        
+    df = ad.get_harps_database(dirloc='.', clobber=clobber)
+    res = ad.query_target(target_coord, df, dist=dist, unit=u.arcsec, verbose=verbose)
+    if res is not None:        
+        #multiple matches
+        if len(res)>1:
+            for i in range(len(res)):
+                # get data
+                r = res.iloc[i]
+                if show_fov:
+                    ad.plot_fov(target_coord,r,ang_dist=dist*2,savefig=True)
+                
+                targetname = r['Target']
+                if outdir is None:
+                    outdir = targetname
+                else:
+                    outdir = join(outdir,targetname)
+                if not isdir(outdir):
+                    makedirs(outdir)
+                
+                if save_all:
+                    for col in tqdm(ad.ALL_DATA_PRODUCTS):
+                        ad.download_product(r, col, outdir, 
+                                      save_csv=True, verbose=verbose)
+                if ncol:
+                    #FIXME: can't download pdf
+                    col = ad.ALL_DATA_PRODUCTS[ncol]
+                    ad.download_product(r, col, outdir, 
+                                      save_csv=True, verbose=verbose)
+        #single match
+        else:
+            targetname = res['Target'].values[0]
+            if outdir is None:
+                outdir = targetname
+            else:
+                outdir = join(outdir,targetname)
+            if not isdir(outdir):
+                makedirs(outdir)
+                
+            r = res.iloc[0]
+            if save_all:
+                for col in tqdm(ad.ALL_DATA_PRODUCTS):
+                    ad.download_product(r, col, outdir, 
+                                      save_csv=True, verbose=verbose)
+            if ncol:
+                #FIXME: can't download pdf
+                col = ad.ALL_DATA_PRODUCTS[ncol]
+                ad.download_product(r, col, outdir, 
+                                  save_csv=True, verbose=verbose)
+                
