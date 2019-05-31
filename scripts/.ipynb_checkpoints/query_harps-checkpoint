@@ -67,31 +67,30 @@ if __name__=='__main__':
         q = ad.query_toi(toi=toi, tic=tic, clobber=clobber)
         r = q['RA'].values[0]
         d = q['Dec'].values[0]
+        if tic is None:
+            tic = q['TIC ID'].values[0]
+        if toi is None:
+            toi = q['TOI'].values[0]
         target_coord = SkyCoord(ra=r, dec=d, unit=(u.hourangle, u.deg))
     
     else:
         print('Supply [ra,dec] or [tic] or [toi]')
         sys.exit()
         
-    df = ad.get_harps_database(dirloc='.', clobber=clobber)
+    df = ad.get_harps_database(dirloc='../data', clobber=clobber)
     res = ad.query_target(target_coord, df, dist=dist, unit=u.arcsec, verbose=verbose)
     if res is not None:        
-        #multiple matches
+        #multiple matches: loop all stars
         if len(res)>1:
             for i in range(len(res)):
-                # get data
-                r = res.iloc[i]
+                if tic is not None:
+                    res = res.assign(ticid = tic) #res['ticid']=tic
+                if toi is not None:
+                    res = res.assign(toi = toi) #res['toi']=toi
                 if show_fov:
                     ad.plot_fov(target_coord,r,ang_dist=dist*2,savefig=True)
                 
-                targetname = r['Target']
-                if outdir is None:
-                    outdir = targetname
-                else:
-                    outdir = join(outdir,targetname)
-                if not isdir(outdir):
-                    makedirs(outdir)
-                
+                r = res.iloc[i]                
                 if save_all:
                     for col in tqdm(ad.ALL_DATA_PRODUCTS):
                         ad.download_product(r, col, outdir, 
@@ -103,14 +102,13 @@ if __name__=='__main__':
                                       save_csv=True, verbose=verbose)
         #single match
         else:
-            targetname = res['Target'].values[0]
-            if outdir is None:
-                outdir = targetname
-            else:
-                outdir = join(outdir,targetname)
-            if not isdir(outdir):
-                makedirs(outdir)
-                
+            if tic is not None:
+                res = res.assign(ticid = tic) #res['ticid']=tic
+            if toi is not None:
+                res = res.assign(toi = toi) #res['toi']=toi
+            if show_fov:
+                ad.plot_fov(target_coord,r,ang_dist=dist*2,savefig=True)
+                   
             r = res.iloc[0]
             if save_all:
                 for col in tqdm(ad.ALL_DATA_PRODUCTS):

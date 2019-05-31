@@ -87,43 +87,65 @@ def query_target(target, df, dist=1, unit=u.arcsec, verbose=True):
         print('Try larger angular distance than d={:.4f}\"\n'.format(sep2d.arcsec[0]))
         return None
 
-def get_rv(res, col, return_fp=True):
+def get_rv(res, col, outdir=None, return_fp=True):
     '''
     '''
     msg = '{} is not available in list of data products\n'.format(col)
     assert col in ALL_DATA_PRODUCTS, msg
+    assert isinstance(res,pd.Series)
     
+    targetname = res['Target']
+    if outdir is None:
+        outdir = targetname
+    else:
+        #save with folder name==ticid 
+        if res['ticid'] is not None:
+            outdir = join(outdir,'tic'+str(res['ticid']))
+#         elif res['toi'] is not None:
+#             outdir = join(outdir,str(res['toi']).split('.')[0])
+        else:
+            outdir = join(outdir,targetname)
+    if not isdir(outdir):
+        makedirs(outdir)
+            
     if col=='Data product plots':
         return NotImplementedError
     else:
         folder = res['Target']+'_RVs'
         filename = res[col]
-#         assert filename.split('.')[-1]=='vels'
+        assert filename.split('.')[-1]=='vels'
         url = join(BASE,folder,filename)
+        fp = join(outdir,filename)
         rv = ascii.read(url).to_pandas()
-    #     rv.columns = 'BJD RV RV_err'.split()
+#         rv.columns = 'BJD RV RV_err'.split()
         if return_fp:
-            return rv,filename
+            return rv,fp
         else:
             return rv
 
-def get_plot(res, outdir='.', verbose=True):
+def get_plot(res, outdir=None, verbose=True):
     '''
     save the pdf file
     '''
     assert isinstance(res,pd.Series)
     
-    targetname = res['Target']#
+    targetname = res['Target']
     if outdir is None:
         outdir = targetname
     else:
-        outdir = join(outdir,targetname)
-        
-    folder = outdir+'_RVs'
+        #save with folder name==ticid 
+        if res['ticid'] is not None:
+            outdir = join(outdir,'tic'+str(res['ticid']))
+#         elif res['toi'] is not None:
+#             outdir = join(outdir,str(res['toi']).split('.')[0])
+        else:
+            outdir = join(outdir,targetname)
+    if not isdir(outdir):
+        makedirs(outdir)
+            
+    folder = targetname+'_RVs'
     filename = res['Data product plots'] 
-#     assert filename.split('.')[-1]=='pdf'
-#     import pdb; pdb.set_trace()
-    print(folder,filename)
+    assert filename.split('.')[-1]=='pdf'
     url = join(BASE,folder,filename)
     fp = join(outdir,filename)
     #save
@@ -134,18 +156,29 @@ def get_plot(res, outdir='.', verbose=True):
         print('Error: {}\nNot saved: {}\n'.format(e,url))
     return fp
 
-def download_product(res, col, outdir='.', save_csv=False, verbose=True):
+def download_product(res, col, outdir=None, save_csv=False, verbose=True):
     '''
     '''
+    targetnames = []
+    targetnames.append(res['Target'])
+    if res['ticid'] is not None:
+        targetnames.append('tic'+str(res['ticid']))
+    if res['toi'] is not None:
+        targetnames.append('toi'+str(res['toi']))
+    targetnames.append('\n')
+    
     if str(res[col])!='nan':
         if col=='Data product plots':
             fp = get_plot(res, outdir=outdir, verbose=verbose)
-            fp = join(outdir,fp)
         else:
-            rv, fp = get_rv(res, col, return_fp=True)
-            fp = join(outdir,fp)
+            rv, fp = get_rv(res, col, outdir=outdir, return_fp=True)
             if save_csv:
-                rv.to_csv(fp,index=False)
+                f = open(fp, 'a')
+                #add known star names on the first line
+                f.write('#'+', '.join(targetnames))
+                #no column names
+                rv.to_csv(f,index=False,header=False) 
+                f.close()
                 if verbose:
                     print('Saved: {}'.format(fp)) 
             else:
