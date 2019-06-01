@@ -11,10 +11,13 @@ import argparse
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as pl
+import matplotlib.cm as cm
+from collections import OrderedDict
 from tqdm import tqdm
 import astropy.units as u
 from astropy.coordinates import SkyCoord
 from astropy.coordinates import match_coordinates_3d
+from astropy.visualization.wcsaxes import SphericalCircle
 from astropy.io import ascii
 from astroplan.plots import plot_finder_image
 
@@ -57,14 +60,14 @@ def get_harps_database(dirloc='../data',verbose=True,clobber=False):
         print('Loaded: {}'.format(fp))
     return df
 
-def query_target(target, df, dist=1, unit=u.arcsec, verbose=True):
+def query_target(target_coord, df, dist=1*u.arcsec, verbose=True):
     '''
     '''
     if verbose:
-        print('\nQuerying objects within {}\" of ra,dec=({},{})\n'.format(dist,target.ra.value,target.dec.value))
+        print('\nQuerying objects within {}\" of ra,dec=({},{})\n'.format(dist,target_coord.ra.value,target_coord.dec.value))
     coords = SkyCoord(ra=df['RA_deg'], dec=df['DEC_deg'], unit=u.deg)
     
-    idxs = target.separation(coords)<dist*unit
+    idxs = target_coord.separation(coords)<dist
             
     #search distance
     if idxs.sum() > 0:
@@ -78,7 +81,7 @@ def query_target(target, df, dist=1, unit=u.arcsec, verbose=True):
         return res
     
     else:
-        idx, sep2d, dist3d = match_coordinates_3d(target, coords, nthneighbor=1)
+        idx, sep2d, dist3d = match_coordinates_3d(target_coord, coords, nthneighbor=1)
         nearest_obj = df.iloc[[idx]]['Target'].values[0]
         ra,dec = df.iloc[[idx]][['RA_deg','DEC_deg']].values[0]
         msg='Nearest HARPS obj to target is\n{}: ra,dec=({:.4f},{:.4f})\n'.format(nearest_obj,ra,dec)
@@ -173,11 +176,11 @@ def download_product(res, col, outdir=None, save_csv=False, verbose=True):
         else:
             rv, fp = get_rv(res, col, outdir=outdir, return_fp=True)
             if save_csv:
-                f = open(fp, 'a')
+                f = open(fp, 'w')
                 #add known star names on the first line
                 f.write('#'+', '.join(targetnames))
                 #no column names
-                rv.to_csv(f,index=False,header=False) 
+                rv.to_csv(f,index=False,header=False,mode='a') #append 
                 f.close()
                 if verbose:
                     print('Saved: {}'.format(fp)) 
@@ -241,27 +244,56 @@ def save_tics(outdir='.'):
     print('Saved: {}'.format(fp))
     return None
 
-def plot_fov(target_coord,res,ang_dist=10,verbose=True,outdir='',savefig=False):
+def plot_fov(target_coord,res,fov_rad=60*u.arcsec,ang_dist=15*u.arcsec, survey='DSS2 Red',verbose=True,outdir=None,savefig=False):
     '''
-    FIXME: wcs projection
     '''    
     if verbose:
         print('\nGenerating FOV ...\n')
-    nearest_obj = res['Target']
-    obj_ra,obj_dec =res[['RA_deg','DEC_deg']].values
-    sep2d = target_coord.separation(SkyCoord(ra=obj_ra, dec=obj_dec, unit=u.deg))
-    rad = ang_dist*u.arcsec
+        
+    nearest_obj = res['Target'].values[0]
+    if outdir is None:
+        outdir = nearest_obj
+    else:
+        #save with folder name==ticid 
+        if len(res['ticid'].dropna())>0:
+            outdir = join(outdir,'tic'+str(res['ticid'].values[0]))
+#         elif res['toi'] is not None:
+#             outdir = join(outdir,str(res['toi']).split('.')[0])
+        else:
+            outdir = join(outdir,nearest_obj)
+    if not isdir(outdir):
+        makedirs(outdir)
     
-    fig, axs = pl.subplots(1,2,figsize=(10,5))
-    ax1,hdu=plot_finder_image(target_coord,fov_radius=rad,survey='DSS2 Blue',reticle=True,ax=axs[0])
-    ax2,hdu=plot_finder_image(target_coord,fov_radius=rad,survey='DSS2 Red',reticle=True,ax=axs[0])
-    
-    if sep2d<rad:
-        axs[0].scatter(obj_ra, obj_dec, transform=ax1.get_transform(), s=300,
-                   edgecolor='red', facecolor='none')
-        axs[1].scatter(obj_ra, obj_dec, transform=ax2.get_transform(), s=300,
-                   edgecolor='red', facecolor='none')
+    nearest_obj_ra,nearest_obj_dec =res[['RA_deg','DEC_deg']].values[0]
+    nearest_obj_coord = SkyCoord(ra=nearest_obj_ra, dec=nearest_obj_dec, unit=u.deg)
+
+    #target in reticle
+    ax,hdu=plot_finder_image(target_coord,fov_radius=60*u.arcsec,reticle=True,survey=survey,reticle_style_kwargs={'label':'target'})
+    c = SphericalCircle((nearest_obj_ra, nearest_obj_dec)*u.deg, ang_dist, edgecolor='green', facecolor='none',
+                  transform=ax.get_transform('icrs'), label='query radius')
+    ax.set_title('{} ({})'.format(survey,nearest_obj))
+    ax.add_patch(c)
+
+    #harps objects within angular distance
+    coords = SkyCoord(ra=res['RA_deg'], dec=res['DEC_deg'], unit=u.deg)
+    sep2d = target_coord.separation(coords)
+
+    idxs = sep2d < ang_dist
+    colors = cm.rainbow(np.linspace(0, 1, idxs.sum()))
+
+    if len(coords[idxs])>1:
+        #plot each star within search radius
+        for n,(coord,color) in enumerate(zip(coords[idxs],colors)):
+            ax.scatter(coord.ra.deg, coord.dec.deg, transform=ax.get_transform('fk5'), s=300,
+               marker='s', edgecolor=color, facecolor='none',label=res.loc[idxs,'Target'].values[n])
+    else:
+        ax.scatter(coords.ra.deg, coords.dec.deg, transform=ax.get_transform('fk5'), s=300,
+               marker='s', edgecolor='blue', facecolor='none',label=res['Target'].values[0])
+    #remove redundant labels due to 4 reticles
+    handles, labels = pl.gca().get_legend_handles_labels()
+    by_label = OrderedDict(zip(labels, handles))
+    pl.legend(by_label.values(), by_label.keys())
     if savefig:
         fp = join(outdir,'{}_fov.png'.format(nearest_obj))
-        fig.savefig(fp,bbox_inches=False)
+        ax.figure.savefig(fp,bbox_inches=False)
         print('Saved: {}'.format(fp))

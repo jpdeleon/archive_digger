@@ -13,40 +13,49 @@ from astropy.coordinates import SkyCoord
 from astropy import units as u
 from tqdm import tqdm
 
-N = range(len(ad.ALL_DATA_PRODUCTS))
+BASE = 'http://www.mpia.de/homes/trifonov/'
+URL = BASE+'HARPS_RVBank.html'
+ALL_DATA_PRODUCTS = ['Data product plots', 'Pre-upgrade DRS', 'Post-upgrade DRS',
+                     'Pre-upgrade standard SERVAL', 'Post-upgrade standard SERVAL',
+                     'Pre-upgrade mlc SERVAL (use these)',
+                     'Post-upgrade mlc SERVAL(use these)']
+N = range(len(ALL_DATA_PRODUCTS))
 parser = argparse.ArgumentParser(description="""
-                parse RV data from {}""".format(ad.URL),
+                parse RV data from {}""".format(URL),
                 usage='use "%(prog)s --help" for more information',
                 formatter_class=argparse.RawTextHelpFormatter)
 parser.add_argument('-ra', help='R.A. [deg]', type=float, default=None)
 parser.add_argument('-dec', help='Dec. [deg]', type=float, default=None)
-parser.add_argument('-p', '--pipeline', help='RV pipeline:\n{}'.format(np.c_[N,ad.ALL_DATA_PRODUCTS]), 
+parser.add_argument('-p', '--pipeline', help='RV pipeline:\n{}'.format(np.c_[N,ALL_DATA_PRODUCTS]), 
                     choices=N, type=int, default=None)
-parser.add_argument('-d', '--distance', help='distance criterion [arcsec]', default=1, type=float)
+parser.add_argument('-d', '--distance', help='distance criterion [arcsec]', default=10, type=float)
 parser.add_argument('-c', '--clobber', help='clobber database (default=False)',
     action='store_true', default=False)
 parser.add_argument('-o', '--outdir', help='output directory', default=None)
-parser.add_argument('-s', '--save', help='save figure (default=False)',
-    action='store_true', default=False)
+parser.add_argument('-s', '--survey', help='imaging survey (see https://astroquery.readthedocs.io/en/latest/skyview/skyview.html)',
+    type=str, default='DSS2 Red')
 parser.add_argument('-toi', help='toi', type=float, default=None)
 parser.add_argument('-tic', help='tic', type=int, default=None)
 parser.add_argument('-v', '--verbose', help='verbose (default=True)',
     action='store_false', default=True)
 parser.add_argument('-a', '--save_all', help='save all available data (default=False)',
     action='store_true', default=False)
-parser.add_argument('-fov', help='plot FOV only', action='store_true', default=False)
+parser.add_argument('-fov', help='plot FOV also', action='store_true', default=False)
+parser.add_argument('-fov_rad', help='FOV radius [arcsec]', type=float, default=120)
 
 args = parser.parse_args()
 ra   = args.ra
 dec  = args.dec
 ncol  = args.pipeline
 outdir = args.outdir
-dist = args.distance
+dist = args.distance*u.arcsec
+survey = args.survey
 verbose = args.verbose
 clobber = args.clobber
 toi = args.toi
 tic = args.tic
-show_fov = args.fov
+show_fov = args.fov*u.arcsec
+fov_rad = args.fov_rad
 save_all = args.save_all
 
 #LOG_FILENAME   = join(outdir,'query_harps.log')
@@ -65,8 +74,11 @@ if __name__=='__main__':
     
     elif tic or toi:
         q = ad.query_toi(toi=toi, tic=tic, clobber=clobber)
-        r = q['RA'].values[0]
-        d = q['Dec'].values[0]
+        if len(q)>0:
+            r = q['RA'].values[0]
+            d = q['Dec'].values[0]
+        else:
+            sys.exit('TIC/ TOI does not exist.\n')
         if tic is None:
             tic = q['TIC ID'].values[0]
         if toi is None:
@@ -76,9 +88,9 @@ if __name__=='__main__':
     else:
         print('Supply [ra,dec] or [tic] or [toi]')
         sys.exit()
-        
+    
     df = ad.get_harps_database(dirloc='../data', clobber=clobber)
-    res = ad.query_target(target_coord, df, dist=dist, unit=u.arcsec, verbose=verbose)
+    res = ad.query_target(target_coord, df, dist=dist, verbose=verbose)
     if res is not None:        
         #multiple matches: loop all stars
         if len(res)>1:
@@ -88,16 +100,19 @@ if __name__=='__main__':
                 if toi is not None:
                     res = res.assign(toi = toi) #res['toi']=toi
                 if show_fov:
-                    ad.plot_fov(target_coord,r,ang_dist=dist*2,savefig=True)
-                
+                    #database query timeout happens so use try/except
+                    try:
+                        ad.plot_fov(target_coord,res,fov_rad=fov_rad,ang_dist=dist,survey=survey,outdir=outdir,savefig=True)
+                    except Exception as e:
+                        print(e)
                 r = res.iloc[i]                
                 if save_all:
-                    for col in tqdm(ad.ALL_DATA_PRODUCTS):
+                    for col in tqdm(ALL_DATA_PRODUCTS):
                         ad.download_product(r, col, outdir, 
                                       save_csv=True, verbose=verbose)
                 if ncol:
                     #FIXME: can't download pdf
-                    col = ad.ALL_DATA_PRODUCTS[ncol]
+                    col = ALL_DATA_PRODUCTS[ncol]
                     ad.download_product(r, col, outdir, 
                                       save_csv=True, verbose=verbose)
         #single match
@@ -107,16 +122,20 @@ if __name__=='__main__':
             if toi is not None:
                 res = res.assign(toi = toi) #res['toi']=toi
             if show_fov:
-                ad.plot_fov(target_coord,r,ang_dist=dist*2,savefig=True)
+                #database query timeout happens so use try/except
+                try:
+                    ad.plot_fov(target_coord,res,fov_rad=fov_rad,ang_dist=dist,survey=survey,outdir=outdir,savefig=True)
+                except Exception as e:
+                    print(e)
                    
             r = res.iloc[0]
             if save_all:
-                for col in tqdm(ad.ALL_DATA_PRODUCTS):
+                for col in tqdm(ALL_DATA_PRODUCTS):
                     ad.download_product(r, col, outdir, 
                                       save_csv=True, verbose=verbose)
             if ncol:
                 #FIXME: can't download pdf
-                col = ad.ALL_DATA_PRODUCTS[ncol]
+                col = ALL_DATA_PRODUCTS[ncol]
                 ad.download_product(r, col, outdir, 
                                   save_csv=True, verbose=verbose)
                 
