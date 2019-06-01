@@ -20,6 +20,7 @@ from astropy.coordinates import match_coordinates_3d
 from astropy.visualization.wcsaxes import SphericalCircle
 from astropy.io import ascii
 from astroplan.plots import plot_finder_image
+pd.set_option('precision', 6)
 
 BASE = 'http://www.mpia.de/homes/trifonov/'
 URL = BASE+'HARPS_RVBank.html'
@@ -77,7 +78,7 @@ def query_target(target_coord, df, dist=1*u.arcsec, verbose=True):
             msg='There are {} matches: {}'.format(len(res), res['Target'].values)
             print(msg)
 #             logging.info(msg)        
-            print(df.loc[idxs,df.columns[7:14]].T)
+            print('{}\n\n'.format(df.loc[idxs,df.columns[7:14]].T))
         return res
     
     else:
@@ -164,10 +165,13 @@ def download_product(res, col, outdir=None, save_csv=False, verbose=True):
     '''
     targetnames = []
     targetnames.append(res['Target'])
-    if res['ticid'] is not None:
-        targetnames.append('tic'+str(res['ticid']))
-    if res['toi'] is not None:
-        targetnames.append('toi'+str(res['toi']))
+    
+    if 'ticid' in res.tolist():
+        if res['ticid'] is not None:
+            targetnames.append('tic'+str(res['ticid']))
+    if 'toi' in res.tolist():
+        if res['toi'] is not None:
+            targetnames.append('toi'+str(res['toi']))
     targetnames.append('\n')
     
     if str(res[col])!='nan':
@@ -187,7 +191,7 @@ def download_product(res, col, outdir=None, save_csv=False, verbose=True):
             else:
                 if verbose:
                     #just print
-                    print('{}:\n{}'.format(col,rv))
+                    print('{}:\n{}\n\n'.format(col,rv))
     
 def get_tois(clobber=True, outdir='../data', verbose=False):
     '''
@@ -198,7 +202,7 @@ def get_tois(clobber=True, outdir='../data', verbose=False):
         makedirs(outdir)
     
     if not exists(fp) or clobber:
-        d = pd.read_csv(dl_link)
+        d = pd.read_csv(dl_link)#, dtype={'RA': float, 'Dec': float})
         d.to_csv(fp, index=False)
         print('Saved: {}'.format(fp))
     else:

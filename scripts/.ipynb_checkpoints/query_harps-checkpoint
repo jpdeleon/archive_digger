@@ -54,8 +54,8 @@ verbose = args.verbose
 clobber = args.clobber
 toi = args.toi
 tic = args.tic
-show_fov = args.fov*u.arcsec
-fov_rad = args.fov_rad
+show_fov = args.fov
+fov_rad = args.fov_rad*u.arcsec
 save_all = args.save_all
 
 #LOG_FILENAME   = join(outdir,'query_harps.log')
@@ -72,13 +72,14 @@ if __name__=='__main__':
     if ra and dec:
         target_coord = SkyCoord(ra=ra, dec=dec, unit=(u.deg, u.deg))
     
-    elif tic or toi:
+    elif tic is None or toi is None:
         q = ad.query_toi(toi=toi, tic=tic, clobber=clobber)
         if len(q)>0:
             r = q['RA'].values[0]
             d = q['Dec'].values[0]
         else:
             sys.exit('TIC/ TOI does not exist.\n')
+        
         if tic is None:
             tic = q['TIC ID'].values[0]
         if toi is None:
