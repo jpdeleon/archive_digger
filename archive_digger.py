@@ -301,3 +301,29 @@ def plot_fov(target_coord,res,fov_rad=60*u.arcsec,ang_dist=15*u.arcsec, survey='
         fp = join(outdir,'{}_fov.png'.format(nearest_obj))
         ax.figure.savefig(fp,bbox_inches=False)
         print('Saved: {}'.format(fp))
+        
+def summarize_match_table(tics=None,outdir='.',save_csv=True,verbose=True):        
+    cols = ['TESS Mag','TIC ID','TOI','Depth (mmag)','Planet Radius (R_Earth)','Period (days)','Stellar Radius (R_Sun)','Stellar Eff Temp (K)']
+
+    if tics is None:
+        fl = glob('../all_tois/tic*')
+        tics = []
+        for f in fl:
+            tics.append(f.split('/')[-1][3:])
+        if verbose:
+            print('matched TOIs/TICs: {}\n'.format(len(tics)))
+    tois = get_tois()
+    idxs = []
+    for tic in tqdm(tics):
+        q = tois[tois['TIC ID']==int(tic)]
+        idxs.append(q.index[0])
+
+    # observed tois
+    o = tois.loc[idxs]
+    # chosen params
+    c = o[cols].sort_values(by='TESS Mag',ascending=True)
+    if save_csv:
+        fp = join(outdir,'TOI_with_harps_data.csv')
+        c.to_csv(fp,index=False)
+        print('Saved: {}'.format(fp))
+    return c

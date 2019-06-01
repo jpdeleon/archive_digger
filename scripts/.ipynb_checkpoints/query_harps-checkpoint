@@ -42,6 +42,7 @@ parser.add_argument('-a', '--save_all', help='save all available data (default=F
     action='store_true', default=False)
 parser.add_argument('-fov', help='plot FOV also', action='store_true', default=False)
 parser.add_argument('-fov_rad', help='FOV radius [arcsec]', type=float, default=120)
+parser.add_argument('-t', '--save_table' ,help='summarize match table only', type=bool, default=False)
 
 args = parser.parse_args()
 ra   = args.ra
@@ -57,6 +58,7 @@ tic = args.tic
 show_fov = args.fov
 fov_rad = args.fov_rad*u.arcsec
 save_all = args.save_all
+save_table = args.save_table
 
 #LOG_FILENAME   = join(outdir,'query_harps.log')
 #reload(logging)
