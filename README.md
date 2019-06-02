@@ -1,5 +1,10 @@
-# archive_digger
-simple query for archival data specific for TESS targets
+archive_digger
+==============
+** simple query for archival radial velocity data of TESS targets **
+
+[![Documentation Status](https://readthedocs.org/projects/archive-digger/badge/?version=latest)](https://archive-digger.readthedocs.io/en/latest/?badge=latest)
+
+[![license](http://img.shields.io/badge/license-MIT-blue.svg?style=flat)](https://github.com/dfm/emcee/blob/master/LICENSE)
 
 # test run
 * ./query_harps -ra=279.271 -dec=5.292 -d=10 -p=1
@@ -16,3 +21,18 @@ To run N-th line, try
 * [HIRES@KOA](https://koa.ipac.caltech.edu/UserGuide/#hires)
 * [SOPHIE/ELODIE](http://atlas.obs-hp.fr/)
 * See also [NExSci contributed RV data](https://exoplanetarchive.ipac.caltech.edu/docs/contributed_data.html)
+
+Documentation
+-------------
+
+Read the docs at `archive_digger.readthedocs.io <http://archive_digger.readthedocs.io/>`_.
+
+License
+-------
+
+<center>
+&copy; 2019 Jerome de Leon
+</center>
+
+archive_digger is a free software made available under the MIT License. For details see
+the LICENSE file.
