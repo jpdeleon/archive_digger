@@ -5,7 +5,7 @@ import argparse
 import logging
 from imp import reload
 import sys
-sys.path.append('..')
+sys.path.append('../archive_digger/')
 import archive_digger as ad
 
 import numpy as np
