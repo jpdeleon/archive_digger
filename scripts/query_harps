@@ -28,7 +28,7 @@ parser.add_argument('-ra', help='R.A. [deg]', type=float, default=None)
 parser.add_argument('-dec', help='Dec. [deg]', type=float, default=None)
 parser.add_argument('-p', '--pipeline', help='RV pipeline:\n{}'.format(np.c_[N,ALL_DATA_PRODUCTS]), 
                     choices=N, type=int, default=None)
-parser.add_argument('-d', '--distance', help='distance criterion [arcsec]', default=10, type=float)
+parser.add_argument('-d', '--distance', help='distance criterion [arcsec]', default=30, type=float)
 parser.add_argument('-c', '--clobber', help='clobber database (default=False)',
     action='store_true', default=False)
 parser.add_argument('-o', '--outdir', help='output directory', default=None)

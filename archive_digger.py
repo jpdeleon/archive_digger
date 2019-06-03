@@ -16,6 +16,8 @@ from collections import OrderedDict
 from tqdm import tqdm
 import astropy.units as u
 from astropy.coordinates import SkyCoord
+from astropy.wcs import WCS
+from astroquery.mast import Catalogs
 from astropy.coordinates import match_coordinates_3d
 from astropy.visualization.wcsaxes import SphericalCircle
 from astropy.io import ascii
@@ -272,8 +274,8 @@ def plot_fov(target_coord,res,fov_rad=60*u.arcsec,ang_dist=15*u.arcsec, survey='
     nearest_obj_coord = SkyCoord(ra=nearest_obj_ra, dec=nearest_obj_dec, unit=u.deg)
 
     #target in reticle
-    ax,hdu=plot_finder_image(target_coord,fov_radius=60*u.arcsec,reticle=True,survey=survey,reticle_style_kwargs={'label':'target'})
-    c = SphericalCircle((nearest_obj_ra, nearest_obj_dec)*u.deg, ang_dist, edgecolor='green', facecolor='none',
+    ax,hdu=plot_finder_image(target_coord,fov_radius=fov_rad,reticle=True,survey=survey,reticle_style_kwargs={'label':'target'})
+    c = SphericalCircle((nearest_obj_ra, nearest_obj_dec)*u.deg, ang_dist, edgecolor='C2', facecolor='none',
                   transform=ax.get_transform('icrs'), label='query radius')
     ax.set_title('{} ({})'.format(survey,nearest_obj))
     ax.add_patch(c)
@@ -286,13 +288,25 @@ def plot_fov(target_coord,res,fov_rad=60*u.arcsec,ang_dist=15*u.arcsec, survey='
     colors = cm.rainbow(np.linspace(0, 1, idxs.sum()))
 
     if len(coords[idxs])>1:
-        #plot each star within search radius
+        #plot each star match within search radius
         for n,(coord,color) in enumerate(zip(coords[idxs],colors)):
-            ax.scatter(coord.ra.deg, coord.dec.deg, transform=ax.get_transform('fk5'), s=300,
-               marker='s', edgecolor=color, facecolor='none',label=res.loc[idxs,'Target'].values[n])
+            ax.scatter(coord.ra.deg, coord.dec.deg, transform=ax.get_transform('icrs'), s=300,
+               marker='^', edgecolor=color, facecolor='none',label=res.loc[idxs,'Target'].values[n])
     else:
-        ax.scatter(coords.ra.deg, coords.dec.deg, transform=ax.get_transform('fk5'), s=300,
-               marker='s', edgecolor='blue', facecolor='none',label=res['Target'].values[0])
+        ax.scatter(coords.ra.deg, coords.dec.deg, transform=ax.get_transform('icrs'), s=300,
+               marker='^', edgecolor='blue', facecolor='none',label=res['Target'].values[0])
+
+    #gaia dr2 sources
+    wcs = WCS(hdu.header)
+    mx, my = hdu.data.shape
+
+    gaia_sources = Catalogs.query_region(target_coord, radius=fov_rad,
+                                         catalog="Gaia", version=2).to_pandas()
+    for r,d in gaia_sources[['ra','dec']].values:
+        pix = wcs.all_world2pix(np.c_[r,d],1)[0]
+        ax.scatter(pix[0], pix[1], marker='s', s=50, edgecolor='C1', facecolor='none', label='gaia source')
+    pl.setp(ax, xlim=(0,mx), ylim=(0,my))
+
     #remove redundant labels due to 4 reticles
     handles, labels = pl.gca().get_legend_handles_labels()
     by_label = OrderedDict(zip(labels, handles))
@@ -327,3 +341,4 @@ def summarize_match_table(tics=None,outdir='.',save_csv=True,verbose=True):
         c.to_csv(fp,index=False)
         print('Saved: {}'.format(fp))
     return c
+
