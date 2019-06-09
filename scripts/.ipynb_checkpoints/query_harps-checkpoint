@@ -5,7 +5,7 @@ import argparse
 import logging
 from imp import reload
 import sys
-sys.path.append('..')
+sys.path.append('../archive_digger/')
 import archive_digger as ad
 
 import numpy as np
@@ -28,7 +28,7 @@ parser.add_argument('-ra', help='R.A. [deg]', type=float, default=None)
 parser.add_argument('-dec', help='Dec. [deg]', type=float, default=None)
 parser.add_argument('-p', '--pipeline', help='RV pipeline:\n{}'.format(np.c_[N,ALL_DATA_PRODUCTS]), 
                     choices=N, type=int, default=None)
-parser.add_argument('-d', '--distance', help='distance criterion [arcsec]', default=10, type=float)
+parser.add_argument('-d', '--distance', help='distance criterion [arcsec]', default=30, type=float)
 parser.add_argument('-c', '--clobber', help='clobber database (default=False)',
     action='store_true', default=False)
 parser.add_argument('-o', '--outdir', help='output directory', default=None)
@@ -71,33 +71,64 @@ if __name__=='__main__':
     #    ra = 289.2
     #    dec= 5.2921
     
-    if ra and dec:
-        target_coord = SkyCoord(ra=ra, dec=dec, unit=(u.deg, u.deg))
-    
-    elif tic is None or toi is None:
-        q = ad.query_toi(toi=toi, tic=tic, clobber=clobber)
-        if len(q)>0:
-            r = q['RA'].values[0]
-            d = q['Dec'].values[0]
-        else:
-            sys.exit('TIC/ TOI does not exist.\n')
+    if save_table:
+        #tally/collate TOI/TIC info of all downloaded data within a directory
+        #this is done after doing a batch run of this script 
+        #and saving all data within one directory
+        df = ad.summarize_match_table(outdir=outdir)
         
-        if tic is None:
-            tic = q['TIC ID'].values[0]
-        if toi is None:
-            toi = q['TOI'].values[0]
-        target_coord = SkyCoord(ra=r, dec=d, unit=(u.hourangle, u.deg))
-    
     else:
-        print('Supply [ra,dec] or [tic] or [toi]')
-        sys.exit()
-    
-    df = ad.get_harps_database(dirloc='../data', clobber=clobber)
-    res = ad.query_target(target_coord, df, dist=dist, verbose=verbose)
-    if res is not None:        
-        #multiple matches: loop all stars
-        if len(res)>1:
-            for i in range(len(res)):
+        #query using coordinates
+        if ra and dec:
+            target_coord = SkyCoord(ra=ra, dec=dec, unit=(u.deg, u.deg))
+
+        #parse coordinates from tess release table using tic or toi
+        elif tic is not None or toi is not None:
+            q = ad.query_toi(toi=toi, tic=tic, clobber=clobber)
+            if len(q)>0:
+                r = q['RA'].values[0]
+                d = q['Dec'].values[0]
+            else:
+                sys.exit('TIC/ TOI does not exist.\n')
+
+            if tic is None:
+                tic = q['TIC ID'].values[0]
+            if toi is None:
+                toi = q['TOI'].values[0]
+            target_coord = SkyCoord(ra=r, dec=d, unit=(u.hourangle, u.deg))
+
+        else:
+            print('Supply [ra,dec] or [tic] or [toi]')
+            sys.exit()
+
+        df = ad.get_harps_database(dirloc='../data', clobber=clobber)
+        res = ad.query_target(target_coord, df, dist=dist, verbose=verbose)
+        if res is not None:        
+            #multiple matches: loop all stars
+            if len(res)>1:
+                for i in range(len(res)):
+                    if tic is not None:
+                        res = res.assign(ticid = tic) #res['ticid']=tic
+                    if toi is not None:
+                        res = res.assign(toi = toi) #res['toi']=toi
+                    if show_fov:
+                        #database query timeout happens so use try/except
+                        try:
+                            ad.plot_fov(target_coord,res,fov_rad=fov_rad,ang_dist=dist,survey=survey,outdir=outdir,savefig=True)
+                        except Exception as e:
+                            print(e)
+                    r = res.iloc[i]                
+                    if save_all:
+                        for col in tqdm(ALL_DATA_PRODUCTS):
+                            ad.download_product(r, col, outdir, 
+                                          save_csv=True, verbose=verbose)
+                    if ncol:
+                        #FIXME: can't download pdf
+                        col = ALL_DATA_PRODUCTS[ncol]
+                        ad.download_product(r, col, outdir, 
+                                          save_csv=True, verbose=verbose)
+            #single match
+            else:
                 if tic is not None:
                     res = res.assign(ticid = tic) #res['ticid']=tic
                 if toi is not None:
@@ -108,37 +139,14 @@ if __name__=='__main__':
                         ad.plot_fov(target_coord,res,fov_rad=fov_rad,ang_dist=dist,survey=survey,outdir=outdir,savefig=True)
                     except Exception as e:
                         print(e)
-                r = res.iloc[i]                
+
+                r = res.iloc[0]
                 if save_all:
                     for col in tqdm(ALL_DATA_PRODUCTS):
                         ad.download_product(r, col, outdir, 
-                                      save_csv=True, verbose=verbose)
+                                          save_csv=True, verbose=verbose)
                 if ncol:
-                    #FIXME: can't download pdf
                     col = ALL_DATA_PRODUCTS[ncol]
                     ad.download_product(r, col, outdir, 
                                       save_csv=True, verbose=verbose)
-        #single match
-        else:
-            if tic is not None:
-                res = res.assign(ticid = tic) #res['ticid']=tic
-            if toi is not None:
-                res = res.assign(toi = toi) #res['toi']=toi
-            if show_fov:
-                #database query timeout happens so use try/except
-                try:
-                    ad.plot_fov(target_coord,res,fov_rad=fov_rad,ang_dist=dist,survey=survey,outdir=outdir,savefig=True)
-                except Exception as e:
-                    print(e)
-                   
-            r = res.iloc[0]
-            if save_all:
-                for col in tqdm(ALL_DATA_PRODUCTS):
-                    ad.download_product(r, col, outdir, 
-                                      save_csv=True, verbose=verbose)
-            if ncol:
-                #FIXME: can't download pdf
-                col = ALL_DATA_PRODUCTS[ncol]
-                ad.download_product(r, col, outdir, 
-                                  save_csv=True, verbose=verbose)
-                
+

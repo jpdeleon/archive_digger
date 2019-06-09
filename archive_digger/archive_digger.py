@@ -3,6 +3,7 @@
 from urllib.request import urlopen, urlretrieve
 from os.path import exists, isdir, join
 from os import makedirs
+from glob import glob
 # import logging
 # from imp import reload
 import sys
@@ -237,7 +238,7 @@ def query_toi(toi=None, tic=None, clobber=True, outdir='../data', verbose=False)
             comments=q[['TOI','Comments']].values
             print('TIC ID\t{}\nP(d)\t{}\nT0(BJD)\t{}\nT14(hr)\t{}\ndepth(ppm)\t{}\n'.format(tic,per,t0,t14,dep))
             print('Comment:\n{}\n'.format(comments))
-    return q.sort_values(by='TOI')
+    return q.sort_values('TOI')
 
 def save_tics(outdir='.'):
     '''
@@ -252,7 +253,9 @@ def save_tics(outdir='.'):
 
 def plot_fov(target_coord,res,fov_rad=60*u.arcsec,ang_dist=15*u.arcsec, survey='DSS2 Red',verbose=True,outdir=None,savefig=False):
     '''
-    '''    
+    plot FOV indicating the query position (magenta reticle) and nearby HARPS target (colored triangle), 
+    query radius (green circle) and Gaia DR2 sources (red squares) 
+    '''
     if verbose:
         print('\nGenerating FOV ...\n')
         
@@ -316,17 +319,40 @@ def plot_fov(target_coord,res,fov_rad=60*u.arcsec,ang_dist=15*u.arcsec, survey='
         ax.figure.savefig(fp,bbox_inches=False)
         print('Saved: {}'.format(fp))
         
-def summarize_match_table(tics=None,outdir='.',save_csv=True,verbose=True):        
-    cols = ['TESS Mag','TIC ID','TOI','Depth (mmag)','Planet Radius (R_Earth)','Period (days)','Stellar Radius (R_Sun)','Stellar Eff Temp (K)']
+def summarize_match_table(tics=None,outdir='../all_tois/',save_csv=True,verbose=True):
+    '''
+    Given tics, a table TOI parameters from TESS releases is returned
+    If tics is None, tic ids are inferred from directories created inside outdir
+    '''
+    cols = ['TESS Mag','TOI','Depth (mmag)','Planet Radius (R_Earth)','Period (days)','Stellar Radius (R_Sun)','Stellar Eff Temp (K)', 'Comments']
 
     if tics is None:
-        fl = glob('../all_tois/tic*')
+        fl = glob(join(outdir,'tic*'))
         tics = []
         for f in fl:
             tics.append(f.split('/')[-1][3:])
         if verbose:
             print('matched TOIs/TICs: {}\n'.format(len(tics)))
-    tois = get_tois()
+    #count number of spectra
+    nspectra={}
+    names={}
+    for tic in tics:
+        fl = glob(join(outdir,'tic'+tic,'*.vels'))
+        num=[]
+        if len(fl)>1:
+            for f in fl:
+                d=pd.read_csv(f)
+                num.append(len(d))
+            nspectra[int(tic)]=max(num)
+        else:
+            d=pd.read_csv(fl[0])
+            nspectra[int(tic)]=len(d)
+        #get names from header; remove #
+        names[int(tic)]=','.join(d.columns)[1:]
+    df=pd.DataFrame(data=[nspectra,names]).T
+    df.columns = ['nspectra','other_names']
+    
+    tois = get_tois(verbose=False)
     idxs = []
     for tic in tqdm(tics):
         q = tois[tois['TIC ID']==int(tic)]
@@ -334,11 +360,17 @@ def summarize_match_table(tics=None,outdir='.',save_csv=True,verbose=True):
 
     # observed tois
     o = tois.loc[idxs]
+    o = o.set_index('TIC ID')
+    final = pd.merge(o, df, left_index=True, right_index=True, how='inner')
     # chosen params
-    c = o[cols].sort_values(by='TESS Mag',ascending=True)
+    cols.append('nspectra')
+    cols.append('other_names')
+    c1 = final[cols].sort_values('TESS Mag',ascending=True)
+    c2 = final.sort_values('TOI',ascending=True)
     if save_csv:
-        fp = join(outdir,'TOI_with_harps_data.csv')
-        c.to_csv(fp,index=False)
-        print('Saved: {}'.format(fp))
-    return c
+        fp = join(outdir,'TOI_with_harps_data')
+        c1.to_csv(fp+'.csv',index=True)
+        c2[['TOI','nspectra','other_names','Comments']].to_csv(fp+'.txt',index=True,header='')
+        print('Saved: {}.csv'.format(fp))
+    return c1
 
