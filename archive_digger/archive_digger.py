@@ -2,6 +2,7 @@
 
 from urllib.request import urlopen, urlretrieve
 from os.path import exists, isdir, join
+from collections import OrderedDict
 from os import makedirs
 from glob import glob
 # import logging
@@ -13,7 +14,6 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as pl
 import matplotlib.cm as cm
-from collections import OrderedDict
 from tqdm import tqdm
 import astropy.units as u
 from astropy.coordinates import SkyCoord
@@ -23,12 +23,9 @@ from astropy.coordinates import match_coordinates_3d
 from astropy.visualization.wcsaxes import SphericalCircle
 from astropy.io import ascii
 from astroplan.plots import plot_finder_image
-import ads
-ADS_TOKEN      = 'SES6KoDxfTO7jBNmOAmfd5eGRfSbzDr6e1UcyChS'
-ads.config.token = ADS_TOKEN
-
 pd.set_option('precision', 6)
 
+ADS_TOKEN      = 'SES6KoDxfTO7jBNmOAmfd5eGRfSbzDr6e1UcyChS'
 BASE = 'http://www.mpia.de/homes/trifonov/'
 URL = BASE+'HARPS_RVBank.html'
 ALL_DATA_PRODUCTS = ['Data product plots', 'Pre-upgrade DRS', 'Post-upgrade DRS',
@@ -41,11 +38,25 @@ ALL_DATA_PRODUCTS = ['Data product plots', 'Pre-upgrade DRS', 'Post-upgrade DRS'
 # logging.basicConfig(filename=LOG_FILENAME ,level=logging.DEBUG)
 
 def get_harps_database(dirloc='../data',verbose=True,clobber=False):
-    '''
-    '''
+    """Download/load harps database as a csv file.
+
+    Parameters
+    ----------
+    dirloc : str
+        directory location
+    verbose : bool
+        print texts
+    clobber : bool
+        download file, else load previously downloaded file
+
+    Returns
+    -------
+    df : pd.DataFrame
+        database dataframe
+    """
     fp = join(dirloc,'harps_db.csv')
-    
-    if not exists(fp) or clobber:    
+
+    if not exists(fp) or clobber:
         #scrape html table
         if verbose:
             print('Downloading {}\n'.format(URL))
@@ -69,25 +80,39 @@ def get_harps_database(dirloc='../data',verbose=True,clobber=False):
     return df
 
 def query_target(target_coord, df, dist=1*u.arcsec, verbose=True):
-    '''
-    '''
+    """Cross-match target coordinates to HARPS database.
+
+    Parameters
+    ----------
+    targ_coord : astropy.coordinates.SkyCoord
+        targ_coord
+    dist : astropy.units
+        target distance to nearest HARPS object
+    verbose : bool
+        print texts
+
+    Returns
+    -------
+    res : pd.DataFrame
+        masked dataframe
+    """
     if verbose:
         print('\nQuerying objects within {}\" of ra,dec=({},{})\n'.format(dist,target_coord.ra.value,target_coord.dec.value))
     coords = SkyCoord(ra=df['RA_deg'], dec=df['DEC_deg'], unit=u.deg)
-    
+
     idxs = target_coord.separation(coords)<dist
-            
+
     #search distance
     if idxs.sum() > 0:
         res = df[idxs]
-        
+
         if verbose:
             msg='There are {} matches: {}'.format(len(res), res['Target'].values)
             print(msg)
-#             logging.info(msg)        
+#             logging.info(msg)
             print('{}\n\n'.format(df.loc[idxs,df.columns[7:14]].T))
         return res
-    
+
     else:
         idx, sep2d, dist3d = match_coordinates_3d(target_coord, coords, nthneighbor=1)
         nearest_obj = df.iloc[[idx]]['Target'].values[0]
@@ -99,17 +124,31 @@ def query_target(target_coord, df, dist=1*u.arcsec, verbose=True):
         return None
 
 def get_rv(res, col, outdir=None, return_fp=True):
-    '''
-    '''
+    """Download .pdf or .vels files from HARPS database
+
+    Parameters
+    ----------
+    res : pandas.DataFrame
+        masked dataframe from query_target
+    outdir : str
+        download directory location
+    return_fp : bool
+        return file path
+
+    Returns
+    -------
+    rv, fp : pd.DataFrame, str
+        downloaded rv, file path
+    """
     msg = '{} is not available in list of data products\n'.format(col)
     assert col in ALL_DATA_PRODUCTS, msg
     assert isinstance(res,pd.Series)
-    
+
     targetname = res['Target']
     if outdir is None:
         outdir = targetname
     else:
-        #save with folder name==ticid 
+        #save with folder name==ticid
         if res['ticid'] is not None:
             outdir = join(outdir,'tic'+str(res['ticid']))
 #         elif res['toi'] is not None:
@@ -118,7 +157,7 @@ def get_rv(res, col, outdir=None, return_fp=True):
             outdir = join(outdir,targetname)
     if not isdir(outdir):
         makedirs(outdir)
-            
+
     if col=='Data product plots':
         return NotImplementedError
     else:
@@ -135,16 +174,29 @@ def get_rv(res, col, outdir=None, return_fp=True):
             return rv
 
 def get_plot(res, outdir=None, verbose=True):
-    '''
-    save the pdf file
-    '''
+    """Download/load harps database as a csv file.
+
+    Parameters
+    ----------
+    res : pandas.DataFrame
+        masked dataframe from query_target
+    outdir : str
+        directory location
+    verbose : bool
+        print texts
+
+    Returns
+    -------
+    fp : str
+        file path
+    """
     assert isinstance(res,pd.Series)
-    
+
     targetname = res['Target']
     if outdir is None:
         outdir = targetname
     else:
-        #save with folder name==ticid 
+        #save with folder name==ticid
         if res['ticid'] is not None:
             outdir = join(outdir,'tic'+str(res['ticid']))
 #         elif res['toi'] is not None:
@@ -153,9 +205,9 @@ def get_plot(res, outdir=None, verbose=True):
             outdir = join(outdir,targetname)
     if not isdir(outdir):
         makedirs(outdir)
-            
+
     folder = targetname+'_RVs'
-    filename = res['Data product plots'] 
+    filename = res['Data product plots']
     assert filename.split('.')[-1]=='pdf'
     url = join(BASE,folder,filename)
     fp = join(outdir,filename)
@@ -168,11 +220,24 @@ def get_plot(res, outdir=None, verbose=True):
     return fp
 
 def download_product(res, col, outdir=None, save_csv=False, verbose=True):
-    '''
-    '''
+    """Download specified data product from HARPS database.
+
+    Parameters
+    ----------
+    res : pandas.DataFrame
+        masked dataframe from `query_target`
+    col : str
+        column name corresponding to data product
+    outdir : str
+        download directory location
+    save_csv : bool
+        save .vels as csv file
+    verbose : bool
+        print texts
+    """
     targetnames = []
     targetnames.append(res['Target'])
-    
+
     if 'ticid' in res.tolist():
         if res['ticid'] is not None:
             targetnames.append('tic'+str(res['ticid']))
@@ -180,7 +245,7 @@ def download_product(res, col, outdir=None, save_csv=False, verbose=True):
         if res['toi'] is not None:
             targetnames.append('toi'+str(res['toi']))
     targetnames.append('\n')
-    
+
     if str(res[col])!='nan':
         if col=='Data product plots':
             fp = get_plot(res, outdir=outdir, verbose=verbose)
@@ -191,23 +256,37 @@ def download_product(res, col, outdir=None, save_csv=False, verbose=True):
                 #add known star names on the first line
                 f.write('#'+', '.join(targetnames))
                 #no column names
-                rv.to_csv(f,index=False,header=False,mode='a') #append 
+                rv.to_csv(f,index=False,header=False,mode='a') #append
                 f.close()
                 if verbose:
-                    print('Saved: {}'.format(fp)) 
+                    print('Saved: {}'.format(fp))
             else:
                 if verbose:
                     #just print
                     print('{}:\n{}\n\n'.format(col,rv))
-    
+
 def get_tois(clobber=True, outdir='../data', verbose=False):
-    '''
-    '''
+    """Download TOI list from TESS Alert/TOI Release.
+
+    Parameters
+    ----------
+    clobber : bool
+        re-download table and save as csv file
+    outdir : str
+        download directory location
+    verbose : bool
+        print texts
+
+    Returns
+    -------
+    d : pandas.DataFrame
+        TOI table as dataframe
+    """
     dl_link = 'https://exofop.ipac.caltech.edu/tess/download_toi.php?sort=toi&output=csv'
     fp = join(outdir,'TOIs.csv')
     if not exists(outdir):
         makedirs(outdir)
-    
+
     if not exists(fp) or clobber:
         d = pd.read_csv(dl_link)#, dtype={'RA': float, 'Dec': float})
         d.to_csv(fp, index=False)
@@ -216,14 +295,32 @@ def get_tois(clobber=True, outdir='../data', verbose=False):
         d = pd.read_csv(fp)
         print('Loaded: {}'.format(fp))
     return d
-    
+
 def query_toi(toi=None, tic=None, clobber=True, outdir='../data', verbose=False):
-    '''
-    '''
+    """Find TOI or tic from TOI dataframe from `get_tois`.
+
+    Parameters
+    ----------
+    toi : float
+        toi number
+    tic : int
+        TIC ID
+    clobber : bool
+        re-download table and save as csv file
+    outdir : str
+        download directory location
+    verbose : bool
+        print texts
+
+    Returns
+    -------
+    d : pandas.DataFrame
+        TOI table as dataframe
+    """
     d = get_tois(clobber=clobber, outdir=outdir, verbose=verbose)
     assert np.any([tic,toi]), 'Supply toi or tic'
     #TOI csv file from TESS alerts
-    
+
     if tic:
         q=d[d['TIC ID']==tic]
     else:
@@ -245,29 +342,63 @@ def query_toi(toi=None, tic=None, clobber=True, outdir='../data', verbose=False)
     return q.sort_values('TOI')
 
 def save_tics(outdir='.'):
-    '''
-    '''
+    """Save TIC IDs.
+
+    Parameters
+    ----------
+    outdir : str
+        download directory location
+
+    Returns
+    -------
+    None
+    """
     d = get_tois()
     tics = d['TIC ID'].values
-    
+
     fp = join(outdir,'tics_from_alerts.txt')
     np.savetxt(fp,tics,fmt='%d')
     print('Saved: {}'.format(fp))
     return None
 
-def plot_fov(target_coord,res,fov_rad=60*u.arcsec,ang_dist=15*u.arcsec, survey='DSS2 Red',verbose=True,outdir=None,savefig=False):
-    '''
-    plot FOV indicating the query position (magenta reticle) and nearby HARPS target (colored triangle), 
-    query radius (green circle) and Gaia DR2 sources (red squares) 
-    '''
+def plot_fov(target_coord,res,fov_rad=60*u.arcsec,ang_dist=15*u.arcsec,
+             survey='DSS2 Red',verbose=True,outdir=None,savefig=False):
+    """Plot FOV indicating the query position (magenta reticle) and nearby HARPS
+    target (colored triangle), query radius (green circle) and Gaia DR2 sources
+    (red squares)
+
+    Parameters
+    ----------
+    targ_coord : astropy.coordinates.SkyCoord
+        targ_coord
+    res : pandas.DataFrame
+        masked dataframe from `query_target`
+    fov_rad : astropy.unit
+        field of view radius
+    ang_dist : astropy.units
+        angular distance to find nearest HARPS object
+    survey : str
+        survey name of archival image
+    outdir : str
+        download directory location
+    verbose : bool
+        print texts
+    savefig : bool
+        save figure
+
+    Returns
+    -------
+    res : pd.DataFrame
+        masked dataframe
+    """
     if verbose:
         print('\nGenerating FOV ...\n')
-        
+
     nearest_obj = res['Target'].values[0]
     if outdir is None:
         outdir = nearest_obj
     else:
-        #save with folder name==ticid 
+        #save with folder name==ticid
         if len(res['ticid'].dropna())>0:
             outdir = join(outdir,'tic'+str(res['ticid'].values[0]))
 #         elif res['toi'] is not None:
@@ -276,7 +407,7 @@ def plot_fov(target_coord,res,fov_rad=60*u.arcsec,ang_dist=15*u.arcsec, survey='
             outdir = join(outdir,nearest_obj)
     if not isdir(outdir):
         makedirs(outdir)
-    
+
     nearest_obj_ra,nearest_obj_dec =res[['RA_deg','DEC_deg']].values[0]
     nearest_obj_coord = SkyCoord(ra=nearest_obj_ra, dec=nearest_obj_dec, unit=u.deg)
 
@@ -322,12 +453,28 @@ def plot_fov(target_coord,res,fov_rad=60*u.arcsec,ang_dist=15*u.arcsec, survey='
         fp = join(outdir,'{}_fov.png'.format(nearest_obj))
         ax.figure.savefig(fp,bbox_inches=False)
         print('Saved: {}'.format(fp))
-        
+    return None
+
 def summarize_match_table(tics=None,outdir='../all_tois/',save_csv=True,verbose=True):
-    '''
-    Given tics, a table TOI parameters from TESS releases is returned
+    """Given tics, a table TOI parameters from TESS releases is returned
     If tics is None, tic ids are inferred from directories created inside outdir
-    '''
+
+    Parameters
+    ----------
+    tics : list
+        TIC IDs of downloaded files; infer tic from directory name if None
+    outdir : str
+        directory location of downloaded files from HARPS database
+    save_csv : bool
+        save cross-matched TOI table as csv
+    verbose : bool
+        print texts
+
+    Returns
+    -------
+    c1 = pandas.DataFrame
+        masked TOI table
+    """
     #selected columns
     cols = ['TESS Mag','TOI','Depth (mmag)','Planet Radius (R_Earth)','Period (days)','Stellar Radius (R_Sun)','Stellar Eff Temp (K)', 'Comments']
 
@@ -386,6 +533,26 @@ def summarize_match_table(tics=None,outdir='../all_tois/',save_csv=True,verbose=
     return c1
 
 def search_ads(results_dir=None,verbose=False):
+    """Search ADS for publication mentioning TOI.
+
+    Parameters
+    ----------
+    results_dir : str
+        directory location of downloaded files
+    verbose : bool
+        print texts
+
+    Returns
+    -------
+    toi_pub : dict
+        dictionary with TIC as key and paper tile as value
+    """
+    try:
+        import ads
+        ads.config.token = ADS_TOKEN
+    except ImportError:
+        raise ImportError('please install ads first')
+
     if results_dir is None:
         results_dir = '.'
     if not exists(results_dir):
