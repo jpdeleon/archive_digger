@@ -23,6 +23,10 @@ from astropy.coordinates import match_coordinates_3d
 from astropy.visualization.wcsaxes import SphericalCircle
 from astropy.io import ascii
 from astroplan.plots import plot_finder_image
+import ads
+ADS_TOKEN      = 'SES6KoDxfTO7jBNmOAmfd5eGRfSbzDr6e1UcyChS'
+ads.config.token = ADS_TOKEN
+
 pd.set_option('precision', 6)
 
 BASE = 'http://www.mpia.de/homes/trifonov/'
@@ -324,6 +328,7 @@ def summarize_match_table(tics=None,outdir='../all_tois/',save_csv=True,verbose=
     Given tics, a table TOI parameters from TESS releases is returned
     If tics is None, tic ids are inferred from directories created inside outdir
     '''
+    #selected columns
     cols = ['TESS Mag','TOI','Depth (mmag)','Planet Radius (R_Earth)','Period (days)','Stellar Radius (R_Sun)','Stellar Eff Temp (K)', 'Comments']
 
     if tics is None:
@@ -348,10 +353,10 @@ def summarize_match_table(tics=None,outdir='../all_tois/',save_csv=True,verbose=
             d=pd.read_csv(fl[0])
             nspectra[int(tic)]=len(d)
         #get names from header; remove #
-        names[int(tic)]=','.join(d.columns)[1:]
+        names[int(tic)]=' '.join(d.columns)[1:]
     df=pd.DataFrame(data=[nspectra,names]).T
-    df.columns = ['nspectra','other_names']
-    
+    df.columns = ['nspectra','HARPS_name']
+    #download recent TOI table
     tois = get_tois(verbose=False)
     idxs = []
     for tic in tqdm(tics):
@@ -362,15 +367,44 @@ def summarize_match_table(tics=None,outdir='../all_tois/',save_csv=True,verbose=
     o = tois.loc[idxs]
     o = o.set_index('TIC ID')
     final = pd.merge(o, df, left_index=True, right_index=True, how='inner')
+    #all_cols = final.columns.tolist()
+    final.index.name = 'TIC'
+
     # chosen params
     cols.append('nspectra')
-    cols.append('other_names')
-    c1 = final[cols].sort_values('TESS Mag',ascending=True)
+    cols.append('HARPS_name')
+
+    c1 = final.sort_values('TESS Mag',ascending=True)
     c2 = final.sort_values('TOI',ascending=True)
     if save_csv:
-        fp = join(outdir,'TOI_with_harps_data')
-        c1.to_csv(fp+'.csv',index=True)
-        c2[['TOI','nspectra','other_names','Comments']].to_csv(fp+'.txt',index=True,header='')
-        print('Saved: {}.csv'.format(fp))
+        fp1 = join(outdir,'TOI_with_harps_data.csv')
+        fp2 = join(outdir,'TOI_with_harps_data_selected_cols.txt')
+        c1.to_csv(fp1,index=True)
+        c2[cols].to_csv(fp2,index=True)
+        print('Saved: {}'.format(fp1))
+        print('Saved: {}'.format(fp2))
     return c1
 
+def search_ads(results_dir=None,verbose=False):
+    if results_dir is None:
+        results_dir = '.'
+    if not exists(results_dir):
+        sys.exit('{} does not exist!'.format(results_dir))
+    tics = glob(join(results_dir,'tic*'))
+
+    toi_pub = {}
+    if len(tics)>0:
+        for tic in tqdm(tics):
+            #TOI.01
+            tic = tic.split('/')[-1][3:]
+            q = query_toi(tic=int(tic),clobber=False)
+            toi = q['TOI'].values[0]
+            toi = str(toi).split('.')[0]
+            #FIXME: filter by year > 2018
+            papers = ads.SearchQuery(q='TOI '+(toi), sort="citation_count", fq='database:astronomy')
+            toi_pub[tic] = [paper.title for paper in papers]
+    else:
+        sys.exit('No tic* directories found in {}'.format(results_dir))
+    if verbose:
+        print(toi_pub)
+    return  toi_pub
