@@ -65,13 +65,16 @@ To run new TICS every new release, just copy the tic from the table and save the
 Finally, to summarize all the downloaded files in a table,
 * ./query_harps -t -o=../all_tois
 
-## RV archives
+## Results
+* [summary table](https://github.com/jpdeleon/archive_digger/tree/master/all_tois)
+
+## Other RV archives
 * [ESO](http://archive.eso.org/cms.html); [script (.py)](http://archive.eso.org/programmatic/eso_ssa.py); [download script (.sh)](http://archive.eso.org/cms/faq/instant-download-how-does-the-download-script-work.html); [scripted access to archive](http://archive.eso.org/programmatic/#SCRIPT)
 * [HIRES@KOA](https://koa.ipac.caltech.edu/UserGuide/#hires)
 * [SOPHIE/ELODIE](http://atlas.obs-hp.fr/)
 * See also [NExSci contributed RV data](https://exoplanetarchive.ipac.caltech.edu/docs/contributed_data.html)
 
-## Documentation
+## Documentation (under construction)
 
 Read the docs at [archive_digger.readthedocs.io](http://archive_digger.readthedocs.io/).
 
