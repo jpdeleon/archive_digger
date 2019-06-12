@@ -43,7 +43,7 @@ def get_harps_database(dirloc='../data',verbose=True,clobber=False):
     Parameters
     ----------
     dirloc : str
-        directory location
+        directory location to save csv table
     verbose : bool
         print texts
     clobber : bool
@@ -51,7 +51,7 @@ def get_harps_database(dirloc='../data',verbose=True,clobber=False):
 
     Returns
     -------
-    df : pd.DataFrame
+    df : pandas.DataFrame
         database dataframe
     """
     fp = join(dirloc,'harps_db.csv')
@@ -69,12 +69,13 @@ def get_harps_database(dirloc='../data',verbose=True,clobber=False):
         df['RA_deg'] = coords.ra.deg
         df['DEC_deg'] = coords.dec.deg
 
-        #save
+        #save table as csv
         if not isdir(dirloc):
             makedirs(dirloc)
         df.to_csv(fp,index=False)
         print('Saved: {}'.format(fp))
     else:
+        #load table if file already exists
         df = pd.read_csv(fp)
         print('Loaded: {}'.format(fp))
     return df
@@ -86,25 +87,30 @@ def query_target(target_coord, df, dist=1*u.arcsec, verbose=True):
     ----------
     targ_coord : astropy.coordinates.SkyCoord
         targ_coord
+    df : pandas.DataFrame
+        dataframe/ table of HARPS data downloaded previously
     dist : astropy.units
-        target distance to nearest HARPS object
+        angular distance within which to find nearest HARPS object
     verbose : bool
         print texts
 
     Returns
     -------
-    res : pd.DataFrame
-        masked dataframe
+    res : pandas.DataFrame
+        resulting masked dataframe
     """
     if verbose:
         print('\nQuerying objects within {} of ra,dec=({},{})\n'.format(dist,
                 target_coord.ra.value,target_coord.dec.value))
     coords = SkyCoord(ra=df['RA_deg'], dec=df['DEC_deg'], unit=u.deg)
 
+    #compute angular separation between target and all HARPS objects and
+    #check which falls within `dist`
     idxs = target_coord.separation(coords)<dist
 
-    #search distance
+    #check if there is any within search space
     if idxs.sum() > 0:
+        #result may be multiple objects
         res = df[idxs]
 
         if verbose:
@@ -115,6 +121,7 @@ def query_target(target_coord, df, dist=1*u.arcsec, verbose=True):
         return res
 
     else:
+        #find the nearest HARPS object in the database to target
         idx, sep2d, dist3d = match_coordinates_3d(target_coord, coords, nthneighbor=1)
         nearest_obj = df.iloc[[idx]]['Target'].values[0]
         ra,dec = df.iloc[[idx]][['RA_deg','DEC_deg']].values[0]
@@ -125,7 +132,7 @@ def query_target(target_coord, df, dist=1*u.arcsec, verbose=True):
         return None
 
 def get_rv(res, col, outdir=None, return_fp=True):
-    """Download .pdf or .vels files from HARPS database
+    """Download rv (*.vels) files from HARPS database
 
     Parameters
     ----------
@@ -138,7 +145,7 @@ def get_rv(res, col, outdir=None, return_fp=True):
 
     Returns
     -------
-    rv, fp : pd.DataFrame, str
+    rv, fp : pandas.DataFrame, str
         downloaded rv, file path
     """
     msg = '{} is not available in list of data products\n'.format(col)
@@ -175,12 +182,12 @@ def get_rv(res, col, outdir=None, return_fp=True):
             return rv
 
 def get_plot(res, outdir=None, verbose=True):
-    """Download/load harps database as a csv file.
+    """Download quick look RV plots (*.pdf) from database
 
     Parameters
     ----------
     res : pandas.DataFrame
-        masked dataframe from query_target
+        resulting masked dataframe from `query_target`
     outdir : str
         directory location
     verbose : bool
@@ -229,7 +236,7 @@ def download_product(res, col, outdir=None, save_csv=False, verbose=True):
     res : pandas.DataFrame
         masked dataframe from `query_target`
     col : str
-        column name corresponding to data product
+        column name corresponding to a data product
     outdir : str
         download directory location
     save_csv : bool
@@ -299,7 +306,7 @@ def get_tois(clobber=True, outdir='../data', verbose=False):
     return d
 
 def query_toi(toi=None, tic=None, clobber=True, outdir='../data', verbose=False):
-    """Find TOI or tic from TOI dataframe from `get_tois`.
+    """Find TOI or TIC from the full TOI Release table from `get_tois`.
 
     Parameters
     ----------
@@ -377,8 +384,8 @@ def plot_fov(target_coord,res,fov_rad=60*u.arcsec,ang_dist=15*u.arcsec,
         masked dataframe from `query_target`
     fov_rad : astropy.unit
         field of view radius
-    ang_dist : astropy.units
-        angular distance to find nearest HARPS object
+    ang_dist : astropy.unit
+        angular distance within which to find nearest HARPS object
     survey : str
         survey name of archival image
     outdir : str
@@ -390,7 +397,7 @@ def plot_fov(target_coord,res,fov_rad=60*u.arcsec,ang_dist=15*u.arcsec,
 
     Returns
     -------
-    res : pd.DataFrame
+    res : pandas.DataFrame
         masked dataframe
     """
     if verbose:
@@ -414,7 +421,7 @@ def plot_fov(target_coord,res,fov_rad=60*u.arcsec,ang_dist=15*u.arcsec,
     nearest_obj_ra,nearest_obj_dec =res[['RA_deg','DEC_deg']].values[0]
     nearest_obj_coord = SkyCoord(ra=nearest_obj_ra, dec=nearest_obj_dec, unit=u.deg)
 
-    #target in reticle
+    #indicate target location with magenta reticle
     ax,hdu=plot_finder_image(target_coord,fov_radius=fov_rad,reticle=True,
         survey=survey,reticle_style_kwargs={'label':'target'})
     c = SphericalCircle((nearest_obj_ra, nearest_obj_dec)*u.deg, ang_dist,
@@ -427,6 +434,7 @@ def plot_fov(target_coord,res,fov_rad=60*u.arcsec,ang_dist=15*u.arcsec,
     coords = SkyCoord(ra=res['RA_deg'], dec=res['DEC_deg'], unit=u.deg)
     sep2d = target_coord.separation(coords)
 
+    #get indices that satisfy the criterion
     idxs = sep2d < ang_dist
     colors = cm.rainbow(np.linspace(0, 1, idxs.sum()))
 
@@ -443,6 +451,7 @@ def plot_fov(target_coord,res,fov_rad=60*u.arcsec,ang_dist=15*u.arcsec,
     wcs = WCS(hdu.header)
     mx, my = hdu.data.shape
 
+    #query gaia sources within region centered at target_coord
     gaia_sources = Catalogs.query_region(target_coord, radius=fov_rad,
                                          catalog="Gaia", version=2).to_pandas()
     for r,d in gaia_sources[['ra','dec']].values:
@@ -462,7 +471,7 @@ def plot_fov(target_coord,res,fov_rad=60*u.arcsec,ang_dist=15*u.arcsec,
     return None
 
 def summarize_match_table(tics=None,outdir='../all_tois/',save_csv=True,verbose=True):
-    """Given tics, a table TOI parameters from TESS releases is returned
+    """Given TIC IDs, a table TOI parameters from TESS releases is returned
     If tics is None, tic ids are inferred from directories created inside outdir
 
     Parameters
@@ -486,6 +495,7 @@ def summarize_match_table(tics=None,outdir='../all_tois/',save_csv=True,verbose=
     'Period (days)','Stellar Radius (R_Sun)','Stellar Eff Temp (K)', 'Comments']
 
     if tics is None:
+        #get TIC from directory names of downloaded files
         fl = glob(join(outdir,'tic*'))
         tics = []
         for f in fl:
@@ -540,7 +550,7 @@ def summarize_match_table(tics=None,outdir='../all_tois/',save_csv=True,verbose=
     return c1
 
 def search_ads(results_dir=None,verbose=False):
-    """Search NASA ADS for publication mentioning TOI.
+    """Search NASA ADS for publication mentioning the TOI.
 
     Parameters
     ----------
