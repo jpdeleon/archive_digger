@@ -97,7 +97,8 @@ def query_target(target_coord, df, dist=1*u.arcsec, verbose=True):
         masked dataframe
     """
     if verbose:
-        print('\nQuerying objects within {}\" of ra,dec=({},{})\n'.format(dist,target_coord.ra.value,target_coord.dec.value))
+        print('\nQuerying objects within {} of ra,dec=({},{})\n'.format(dist,
+                target_coord.ra.value,target_coord.dec.value))
     coords = SkyCoord(ra=df['RA_deg'], dec=df['DEC_deg'], unit=u.deg)
 
     idxs = target_coord.separation(coords)<dist
@@ -120,7 +121,7 @@ def query_target(target_coord, df, dist=1*u.arcsec, verbose=True):
         msg='Nearest HARPS obj to target is\n{}: ra,dec=({:.4f},{:.4f})\n'.format(nearest_obj,ra,dec)
         print(msg)
 #         logging.info(msg)
-        print('Try larger angular distance than d={:.4f}\"\n'.format(sep2d.arcsec[0]))
+        print('Try angular distance larger than d={:.4f}\"\n'.format(sep2d.arcsec[0]))
         return None
 
 def get_rv(res, col, outdir=None, return_fp=True):
@@ -165,7 +166,7 @@ def get_rv(res, col, outdir=None, return_fp=True):
         filename = res[col]
         assert filename.split('.')[-1]=='vels'
         url = join(BASE,folder,filename)
-        fp = join(outdir,filename)
+        fp = join(outdir,'tic'+str(res['ticid'])+'_'+filename)
         rv = ascii.read(url).to_pandas()
 #         rv.columns = 'BJD RV RV_err'.split()
         if return_fp:
@@ -193,12 +194,13 @@ def get_plot(res, outdir=None, verbose=True):
     assert isinstance(res,pd.Series)
 
     targetname = res['Target']
+    tic = res['ticid']
     if outdir is None:
         outdir = targetname
     else:
         #save with folder name==ticid
-        if res['ticid'] is not None:
-            outdir = join(outdir,'tic'+str(res['ticid']))
+        if tic is not None:
+            outdir = join(outdir,'tic'+str(tic))
 #         elif res['toi'] is not None:
 #             outdir = join(outdir,str(res['toi']).split('.')[0])
         else:
@@ -210,7 +212,7 @@ def get_plot(res, outdir=None, verbose=True):
     filename = res['Data product plots']
     assert filename.split('.')[-1]=='pdf'
     url = join(BASE,folder,filename)
-    fp = join(outdir,filename)
+    fp = join(outdir,'tic'+str(tic)+'_'+filename)
     #save
     try:
         urlretrieve(url, fp)
@@ -238,10 +240,10 @@ def download_product(res, col, outdir=None, save_csv=False, verbose=True):
     targetnames = []
     targetnames.append(res['Target'])
 
-    if 'ticid' in res.tolist():
+    if 'ticid' in res.index.tolist():
         if res['ticid'] is not None:
             targetnames.append('tic'+str(res['ticid']))
-    if 'toi' in res.tolist():
+    if 'toi' in res.index.tolist():
         if res['toi'] is not None:
             targetnames.append('toi'+str(res['toi']))
     targetnames.append('\n')
@@ -362,7 +364,7 @@ def save_tics(outdir='.'):
     return None
 
 def plot_fov(target_coord,res,fov_rad=60*u.arcsec,ang_dist=15*u.arcsec,
-             survey='DSS2 Red',verbose=True,outdir=None,savefig=False):
+             survey='DSS',verbose=True,outdir=None,savefig=False):
     """Plot FOV indicating the query position (magenta reticle) and nearby HARPS
     target (colored triangle), query radius (green circle) and Gaia DR2 sources
     (red squares)
@@ -395,12 +397,13 @@ def plot_fov(target_coord,res,fov_rad=60*u.arcsec,ang_dist=15*u.arcsec,
         print('\nGenerating FOV ...\n')
 
     nearest_obj = res['Target'].values[0]
+    tic = res['ticid'].values[0]
     if outdir is None:
         outdir = nearest_obj
     else:
         #save with folder name==ticid
         if len(res['ticid'].dropna())>0:
-            outdir = join(outdir,'tic'+str(res['ticid'].values[0]))
+            outdir = join(outdir,'tic'+str(tic))
 #         elif res['toi'] is not None:
 #             outdir = join(outdir,str(res['toi']).split('.')[0])
         else:
@@ -412,9 +415,11 @@ def plot_fov(target_coord,res,fov_rad=60*u.arcsec,ang_dist=15*u.arcsec,
     nearest_obj_coord = SkyCoord(ra=nearest_obj_ra, dec=nearest_obj_dec, unit=u.deg)
 
     #target in reticle
-    ax,hdu=plot_finder_image(target_coord,fov_radius=fov_rad,reticle=True,survey=survey,reticle_style_kwargs={'label':'target'})
-    c = SphericalCircle((nearest_obj_ra, nearest_obj_dec)*u.deg, ang_dist, edgecolor='C2', facecolor='none',
-                  transform=ax.get_transform('icrs'), label='query radius')
+    ax,hdu=plot_finder_image(target_coord,fov_radius=fov_rad,reticle=True,
+        survey=survey,reticle_style_kwargs={'label':'target'})
+    c = SphericalCircle((nearest_obj_ra, nearest_obj_dec)*u.deg, ang_dist,
+        edgecolor='C2', transform=ax.get_transform('icrs'),
+        facecolor='none', label='query radius')
     ax.set_title('{} ({})'.format(survey,nearest_obj))
     ax.add_patch(c)
 
@@ -442,7 +447,8 @@ def plot_fov(target_coord,res,fov_rad=60*u.arcsec,ang_dist=15*u.arcsec,
                                          catalog="Gaia", version=2).to_pandas()
     for r,d in gaia_sources[['ra','dec']].values:
         pix = wcs.all_world2pix(np.c_[r,d],1)[0]
-        ax.scatter(pix[0], pix[1], marker='s', s=50, edgecolor='C1', facecolor='none', label='gaia source')
+        ax.scatter(pix[0], pix[1], marker='s', s=50, edgecolor='C1',
+            facecolor='none', label='gaia source')
     pl.setp(ax, xlim=(0,mx), ylim=(0,my))
 
     #remove redundant labels due to 4 reticles
@@ -450,8 +456,8 @@ def plot_fov(target_coord,res,fov_rad=60*u.arcsec,ang_dist=15*u.arcsec,
     by_label = OrderedDict(zip(labels, handles))
     pl.legend(by_label.values(), by_label.keys())
     if savefig:
-        fp = join(outdir,'{}_fov.png'.format(nearest_obj))
-        ax.figure.savefig(fp,bbox_inches=False)
+        fp = join(outdir,'tic{}_{}_fov.png'.format(tic,nearest_obj))
+        ax.figure.savefig(fp,bbox_inches='tight')
         print('Saved: {}'.format(fp))
     return None
 
@@ -476,7 +482,8 @@ def summarize_match_table(tics=None,outdir='../all_tois/',save_csv=True,verbose=
         masked TOI table
     """
     #selected columns
-    cols = ['TESS Mag','TOI','Depth (mmag)','Planet Radius (R_Earth)','Period (days)','Stellar Radius (R_Sun)','Stellar Eff Temp (K)', 'Comments']
+    cols = ['TESS Mag','TOI','Depth (mmag)','Planet Radius (R_Earth)',
+    'Period (days)','Stellar Radius (R_Sun)','Stellar Eff Temp (K)', 'Comments']
 
     if tics is None:
         fl = glob(join(outdir,'tic*'))
@@ -500,7 +507,7 @@ def summarize_match_table(tics=None,outdir='../all_tois/',save_csv=True,verbose=
             d=pd.read_csv(fl[0])
             nspectra[int(tic)]=len(d)
         #get names from header; remove #
-        names[int(tic)]=' '.join(d.columns)[1:]
+        names[int(tic)]=d.columns[0][1:]
     df=pd.DataFrame(data=[nspectra,names]).T
     df.columns = ['nspectra','HARPS_name']
     #download recent TOI table
@@ -533,7 +540,7 @@ def summarize_match_table(tics=None,outdir='../all_tois/',save_csv=True,verbose=
     return c1
 
 def search_ads(results_dir=None,verbose=False):
-    """Search ADS for publication mentioning TOI.
+    """Search NASA ADS for publication mentioning TOI.
 
     Parameters
     ----------
