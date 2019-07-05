@@ -303,7 +303,10 @@ def get_tois(clobber=True, outdir='../data', verbose=False):
     else:
         d = pd.read_csv(fp)
         print('Loaded: {}'.format(fp))
-    return d
+
+    #remove False Positives
+    d = d[d['TFOPWG Disposition']!='FP']
+    return d.sort_values('TOI')
 
 def query_toi(toi=None, tic=None, clobber=True, outdir='../data', verbose=False):
     """Find TOI or TIC from the full TOI Release table from `get_tois`.

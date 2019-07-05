@@ -1,0 +1,155 @@
+#!/usr/bin/env python
+import sys
+from os.path import exists, join
+from os import makedirs
+import argparse
+import pyvo as vo
+from astropy.coordinates import SkyCoord
+from astropy import units as u
+import urllib
+from tqdm import tqdm
+import deepdish as dd
+
+import warnings
+from astropy.utils.exceptions import AstropyWarning
+sys.path.append('../archive_digger')
+import archive_digger as ad
+
+# Define the end point and the SSA service to query
+ssap_endpoint = "http://archive.eso.org/ssap"
+ssap_service = vo.dal.SSAService(ssap_endpoint)
+
+parser = argparse.ArgumentParser(description="""
+                query ESO data via {}""".format(ssap_endpoint),
+                usage='use "%(prog)s --help" for more information',
+                formatter_class=argparse.RawTextHelpFormatter)
+parser.add_argument('-ra', help='R.A. [deg]', type=float, default=None)
+parser.add_argument('-dec', help='Dec. [deg]', type=float, default=None)
+parser.add_argument('-snr', help='minimum SNR', type=float, default=None)
+parser.add_argument('-d', '--diameter', help='diameter [arcsec]', default=30, type=float)
+parser.add_argument('-i', '--instru', help='RV instrument', default='HARPS',
+                    type=str, choices=['HARPS','FEROS','UVES','XSHOOTER'])
+parser.add_argument('-o', '--outdir', help='output directory', default=None)
+parser.add_argument('-toi', help='toi', type=float, default=None)
+parser.add_argument('-tic', help='tic ID', type=int, default=None)
+parser.add_argument('-tics', help='list of tic IDs', type=list, default=None)
+parser.add_argument('-v', '--verbose', help='verbose (default=False)',
+                    action='store_true', default=False)
+parser.add_argument('-a', '--download_all', help='save all available data (default=False)',
+                    action='store_true', default=False)
+parser.add_argument('-s', '--save_csv', help='save eso results into csv (default=False)',
+                    action='store_true', default=False)
+
+parser.add_argument('-c', '--clobber', help='clobber database (default=False)',
+                    action='store_true', default=False)
+
+args = parser.parse_args()
+ra   = args.ra
+dec  = args.dec
+diameter = args.diameter*u.arcsec
+instru = args.instru
+min_snr = args.snr
+outdir = args.outdir
+verbose = args.verbose
+clobber = args.clobber
+save_csv = args.save_csv
+toi = args.toi
+tic = args.tic
+download_all = args.download_all
+
+if __name__ == '__main__':
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', AstropyWarning)
+        if ra and dec:
+            target_coord = SkyCoord(ra=ra, dec=dec, unit=(u.deg, u.deg))
+        elif tic is not None or toi is not None:
+            q = ad.query_toi(toi=toi, tic=tic, clobber=clobber)
+            if len(q)>0:
+                r = q['RA'].values[0]
+                d = q['Dec'].values[0]
+            else:
+                sys.exit('TIC/ TOI does not exist.\n')
+
+            if tic is None:
+                tic = q['TIC ID'].values[0]
+            if toi is None:
+                toi = q['TOI'].values[0]
+            target_coord = SkyCoord(ra=r, dec=d, unit=(u.hourangle, u.deg))
+
+        else:
+            # print('Supply [ra,dec] or [tic] or [toi]')
+            # sys.exit()
+            if ra is None and dec is None:
+                ra = 84.29125
+                dec= -80.46917
+                target_coord = SkyCoord(ra=ra, dec=dec, unit=u.deg)
+        if diameter is None:
+            diameter = 0.5*u.deg
+        if min_snr is None:
+            min_snr = 1
+
+        if verbose:
+            print('Querying ra={} and dec={}\n'.format(ra, dec))
+
+        ssap_resultset = ssap_service.search(pos=target_coord.fk5, diameter=diameter)
+
+        fields = ["COLLECTION", "TARGETNAME", "s_ra", "s_dec", "APERTURE",
+              "em_min", "em_max", "SPECRP", "SNR", "t_min", "t_max",
+              "CREATORDID", "access_url"]
+
+        #convert vottable to dataframe
+        df = ssap_resultset.to_table().to_pandas()
+
+        #decode bytes to str
+        df["COLLECTION"] = df["COLLECTION"].apply(lambda x: x.decode())
+        df["dp_id"]      = df["dp_id"].apply(lambda x: x.decode())
+        df["CREATORDID"] = df["CREATORDID"].apply(lambda x: x.decode())
+        df["access_url"] = df["access_url"].apply(lambda x: x.decode())
+        df['TARGETNAME'] = df['TARGETNAME'].apply(lambda x: x.decode())
+
+        #appply filters
+        filter = (df['COLLECTION']==instru).values & (df["SNR"] > min_snr).values
+        df = df.loc[filter,fields]
+
+        if len(df)>0:
+            # if verbose:
+            print('Found {} {} spectra with SNR>{}\n'.format(len(df.loc[filter,fields]),
+                                                            instru, min_snr))
+            targetnames = df['TARGETNAME'].apply(lambda x: str(x).replace('-','')).unique()
+            if len(targetnames)>1:
+                print('There are {} matches: {}\n'.format(len(targetnames),targetnames))
+
+            if download_all:
+                if not exists(outdir):
+                     os.makedirs(outdir)
+                id={}
+                for i in tqdm(range(len(df))):
+                    instrument = df.loc[i,"COLLECTION"]
+                    targetname = df.loc[i,"TARGETNAME"]
+                    fp = join(outdir,targetname)
+                    if not exists(fp):
+                         os.makedirs(fp)
+
+                    dp_id = df.loc[i,"dp_id"]
+                    origfile = df.loc[i,"CREATORDID"][23:]
+                    id[origfile] = dp_id
+                    # The downloaded file is saved with the name provided by the creator of the file: origfile.
+                    # Though, care should be taken, because reduced products
+                    # generated by external users might have colliding CREATORDID!
+                    # This "demo" script does not take into consideration this risk.
+                    print("Fetching file with SNR={}: {}.fits renamed to {}".format(df.loc[i,"SNR"], dp_id, origfile))
+                    url = df.loc[i,"access_url"]
+                    filename = join(fp,df.loc[i,"CREATORDID"][23:].replace(':',''))
+                    urllib.request.urlretrieve(url, filename)
+            elif save_csv:
+                fp = join(outdir,'tic'+str(tic))
+                if not exists(fp):
+                     makedirs(fp)
+                fout=join(fp,'tic{}_{}.csv'.format(tic,targetnames))
+                df.to_csv(fout,index=False)
+                print('Saved: {}'.format(fout))
+            else:
+                if verbose:
+                    print(df.loc[filter,fields])
+        else:
+            sys.exit('No data that matches the criteria')
