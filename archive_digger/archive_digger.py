@@ -274,7 +274,8 @@ def download_product(res, col, outdir=None, save_csv=False, verbose=True):
                     #just print
                     print('{}:\n{}\n\n'.format(col,rv))
 
-def get_tois(clobber=True, outdir='../data', verbose=False):
+def get_tois(clobber=True, outdir='../data', verbose=False,
+             remove_FP=True, remove_known_planets=True):
     """Download TOI list from TESS Alert/TOI Release.
 
     Parameters
@@ -298,14 +299,24 @@ def get_tois(clobber=True, outdir='../data', verbose=False):
 
     if not exists(fp) or clobber:
         d = pd.read_csv(dl_link)#, dtype={'RA': float, 'Dec': float})
+        #remove False Positives
+        if remove_FP:
+            d = d[d['TFOPWG Disposition']!='FP']
+            print('TOIs with TFPWG disposition==FP are removed.\n')
+        if remove_known_planets:
+            # d = d['Comments'].str.contains('WASP')
+            d = d[~np.array(d['Comments'].str.contains('WASP').tolist(),dtype=bool)]
+            # d = d['Comments'].str.contains('HAT')
+            d = d[~np.array(d['Comments'].str.contains('HAT').tolist(),dtype=bool)]
+            print('WASP and HAT planets are removed.\n')
         d.to_csv(fp, index=False)
-        print('Saved: {}'.format(fp))
+        print('Saved: {}\n'.format(fp))
     else:
         d = pd.read_csv(fp)
+        #remove False Positives
+        d = d[d['TFOPWG Disposition']!='FP']
         print('Loaded: {}'.format(fp))
 
-    #remove False Positives
-    d = d[d['TFOPWG Disposition']!='FP']
     return d.sort_values('TOI')
 
 def query_toi(toi=None, tic=None, clobber=True, outdir='../data', verbose=False):
