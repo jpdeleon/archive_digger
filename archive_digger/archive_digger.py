@@ -275,7 +275,7 @@ def download_product(res, col, outdir=None, save_csv=False, verbose=True):
                     print('{}:\n{}\n\n'.format(col,rv))
 
 def get_tois(clobber=True, outdir='../data', verbose=False,
-             remove_FP=True, remove_known_planets=True):
+             remove_FP=True, remove_known_planets=False):
     """Download TOI list from TESS Alert/TOI Release.
 
     Parameters
