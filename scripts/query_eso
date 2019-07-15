@@ -164,7 +164,7 @@ if __name__ == '__main__':
                 if len(targetnames)>1:
                     fout=join(fp,'tic{}_{}.csv'.format(tic,'-'.join(targetnames)))
                 else:
-                    fout=join(fp,'tic{}_{}.csv'.format(tic,targetnames))
+                    fout=join(fp,'tic{}_{}.csv'.format(tic,targetnames[0]))
                 df.to_csv(fout,index=False)
                 print('Saved: {}'.format(fout))
             else:

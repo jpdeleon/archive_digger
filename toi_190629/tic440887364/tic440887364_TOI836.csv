@@ -1,0 +1,2 @@
+COLLECTION,TARGETNAME,s_ra,s_dec,APERTURE,em_min,em_max,SPECRP,SNR,t_min,t_max,CREATORDID,access_url,dp_id
+HARPS,TOI-836,225.080148,-24.45629,0.999972,3.78149e-07,6.91226e-07,115000.0,48.5,58670.14736279,58670.16472388,ivo://eso.org/origfile?HARPS.2019-07-06T03:32:12.145_s1d_A_DRS_HARPS_3.8_ESOSDP.fits,http://archive.eso.org/datalink/links?ID=ivo://eso.org/ID?ADP.2019-07-07T01:09:21.133&eso_download=file,ADP.2019-07-07T01:09:21.133
