@@ -1,0 +1,11 @@
+./query_eso -tic=360630575 -v -i=harps -d=30 -save_csv -o ../toi_190824
+./query_eso -tic=375225453 -v -i=harps -d=30 -save_csv -o ../toi_190824
+./query_eso -tic=375223080 -v -i=harps -d=30 -save_csv -o ../toi_190824
+./query_eso -tic=136274063 -v -i=harps -d=30 -save_csv -o ../toi_190824
+./query_eso -tic=382331352 -v -i=harps -d=30 -save_csv -o ../toi_190824
+./query_eso -tic=387079085 -v -i=harps -d=30 -save_csv -o ../toi_190824
+./query_eso -tic=193413306 -v -i=harps -d=30 -save_csv -o ../toi_190824
+./query_eso -tic=361034196 -v -i=harps -d=30 -save_csv -o ../toi_190824
+./query_eso -tic=129319156 -v -i=harps -d=30 -save_csv -o ../toi_190824
+./query_eso -tic=343648136 -v -i=harps -d=30 -save_csv -o ../toi_190824
+./query_eso -tic=426077080 -v -i=harps -d=30 -save_csv -o ../toi_190824

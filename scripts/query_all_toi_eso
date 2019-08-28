@@ -6,6 +6,11 @@ from astropy.coordinates import SkyCoord
 from astropy import units as u
 import urllib
 import pandas as pd
+from tqdm import tqdm
+from joblib import Parallel, delayed
+import multiprocessing
+
+num_cores = multiprocessing.cpu_count()/2
 
 # Define the end point and the SSA service to query
 ssap_endpoint = "http://archive.eso.org/ssap"
@@ -17,21 +22,30 @@ fields = ["COLLECTION", "TARGETNAME", "s_ra", "s_dec", "APERTURE",
 sys.path.append('../archive_digger')
 import archive_digger as ad
 
+def query_eso(ra, dec, size, instru='HARPS', min_snr=1):
+    pos = SkyCoord(ra=ra, dec=dec, unit=(u.hourangle, u.deg))
+    ssap_resultset = ssap_service.search(pos=pos.fk5, diameter=size)
+    df=ssap_resultset.to_table().to_pandas()
+    df=df[(df['COLLECTION']==instru) & (df['SNR']>min_snr)]
+    return df
+
 tois = ad.get_tois() 
 ras = tois['RA'].values
 decs= tois['Dec'].values
 tics= tois['TIC ID'].values
 
+diameter = 30 #deg
+size = diameter*u.deg
 min_snr = 1
 nspectra = {}
 for ra,dec,tic in tqdm(zip(ras,decs,tics)):
-    pos = SkyCoord(ra=ra, dec=dec, unit=(u.hourangle, u.deg))
-    size = diameter*u.deg
-    ssap_resultset = ssap_service.search(pos=pos.fk5, diameter=size)
-    df=ssap_resultset.to_table().to_pandas()
-    df=df[(df['COLLECTION']=='HARPS') & (df['SNR']>min_snr)]
+    df = query_eso(ra, dec, size, instru='HARPS', min_snr=min_snr)
     nspectra[tic] = len(df)
-    
+
+#results = Parallel(n_jobs=num_cores)(delayed(query_eso)(ra,dec,tic) for for ra,dec,tic in tqdm(zip(ras,decs,tics)))
+
+
+
 d=pd.DataFrame([harps,uves,feros]).T
 d.columns=['harps','uves','feros']
 final=pd.merge(d,tois,right_on='TIC ID', left_index=True)
