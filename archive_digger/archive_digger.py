@@ -134,7 +134,7 @@ def query_target(target_coord, df, dist=1*u.arcsec, verbose=True):
             print('Try angular distance larger than d={:.4f}\"\n'.format(sep2d.arcsec[0]))
         return None
 
-def get_rv(res, col, outdir=None, return_fp=True):
+def get_rv(res, col, outdir=None, save=False, return_url=True):
     """Download rv (*.vels) files from HARPS database
 
     Parameters
@@ -148,8 +148,8 @@ def get_rv(res, col, outdir=None, return_fp=True):
 
     Returns
     -------
-    rv, fp : pandas.DataFrame, str
-        downloaded rv, file path
+    rv, url : pandas.DataFrame, url
+        df rv, url
     """
     msg = '{} is not available in list of data products\n'.format(col)
     assert col in ALL_DATA_PRODUCTS, msg
@@ -174,8 +174,8 @@ def get_rv(res, col, outdir=None, return_fp=True):
         fp = join(outdir,filename)
         rv = ascii.read(url).to_pandas()
 #         rv.columns = 'BJD RV RV_err'.split()
-        if return_fp:
-            return rv,fp
+        if return_url:
+            return rv,url
         else:
             return rv
 
@@ -196,6 +196,7 @@ def get_plot(res, outdir=None, verbose=True):
     fp : str
         file path
     """
+    raise DeprecationWarning
     assert isinstance(res,pd.Series)
 
     targetname = res['Target']
@@ -242,6 +243,7 @@ def download_product(res, col, outdir=None, save_csv=False, verbose=True):
     verbose : bool
         print texts
     """
+    raise DeprecationWarning
     targetnames = []
     targetnames.append(res['Target'])
 
@@ -382,7 +384,7 @@ def save_tics(outdir='.'):
     print('Saved: {}'.format(fp))
     return None
 
-def plot_fov(target_coord,res,name=None,fov_rad=60*u.arcsec,ang_dist=15*u.arcsec,
+def plot_fov(target_coord,res,fov_rad=60*u.arcsec,ang_dist=15*u.arcsec,
              survey='DSS',verbose=True,outdir=None,savefig=False):
     """Plot FOV indicating the query position (magenta reticle) and nearby HARPS
     target (colored triangle), query radius (green circle) and Gaia DR2 sources
@@ -413,9 +415,8 @@ def plot_fov(target_coord,res,name=None,fov_rad=60*u.arcsec,ang_dist=15*u.arcsec
     """
     if verbose:
         print('\nGenerating FOV ...\n')
-        
-    nearest_obj = res['Target'].values[0]
-    outdir = join(outdir, f'{name}_{nearest_obj}')
+    
+    nearest_obj = res['Target']
     if not isdir(outdir):
         makedirs(outdir)
 
@@ -466,7 +467,7 @@ def plot_fov(target_coord,res,name=None,fov_rad=60*u.arcsec,ang_dist=15*u.arcsec
     by_label = OrderedDict(zip(labels, handles))
     pl.legend(by_label.values(), by_label.keys())
     if savefig:
-        fp = join(outdir, f'{name}_{nearest_obj}_fov.png')
+        fp = join(outdir, f'{nearest_obj}_fov.png')
         ax.figure.savefig(fp, bbox_inches='tight')
         print('Saved: {}'.format(fp))
         pl.close()
