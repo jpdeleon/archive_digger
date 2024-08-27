@@ -23,15 +23,18 @@ from astropy.coordinates import match_coordinates_3d
 from astropy.visualization.wcsaxes import SphericalCircle
 from astropy.io import ascii
 from astroplan.plots import plot_finder_image
-pd.set_option('precision', 6)
+pd.set_option("display.precision", 6)
 
 ADS_TOKEN      = 'SES6KoDxfTO7jBNmOAmfd5eGRfSbzDr6e1UcyChS'
-BASE = 'http://www.mpia.de/homes/trifonov/'
-URL = BASE+'HARPS_RVBank.html'
-ALL_DATA_PRODUCTS = ['Data product plots', 'Pre-upgrade DRS', 'Post-upgrade DRS',
+BASE = 'https://www2.mpia-hd.mpg.de/homes/trifonov/'
+#URL_RVs = BASE+'/HARPS_RVBank_ver02.csv'
+URL_HOME = BASE+'/HARPS_RVBank.html'
+
+ALL_DATA_PRODUCTS_OLD = ['Data product plots', 'Pre-upgrade DRS', 'Post-upgrade DRS',
                      'Pre-upgrade standard SERVAL', 'Post-upgrade standard SERVAL',
                      'Pre-upgrade mlc SERVAL (use these)',
                      'Post-upgrade mlc SERVAL(use these)']
+ALL_DATA_PRODUCTS = ['Data products (dat)', 'Data products (csv)']
 
 # LOG_FILENAME   = join(outdir,'query_harps.log')
 # reload(logging)
@@ -59,8 +62,8 @@ def get_harps_database(dirloc='../data',verbose=True,clobber=False):
     if not exists(fp) or clobber:
         #scrape html table
         if verbose:
-            print('Downloading {}\n'.format(URL))
-        table = pd.read_html(URL, header=0)
+            print('Downloading {}\n'.format(URL_HOME))
+        table = pd.read_html(URL_HOME, header=0)
         #choose first table
         df = table[0]
 
@@ -126,9 +129,9 @@ def query_target(target_coord, df, dist=1*u.arcsec, verbose=True):
         nearest_obj = df.iloc[[idx]]['Target'].values[0]
         ra,dec = df.iloc[[idx]][['RA_deg','DEC_deg']].values[0]
         msg='Nearest HARPS obj to target is\n{}: ra,dec=({:.4f},{:.4f})\n'.format(nearest_obj,ra,dec)
-        print(msg)
-#         logging.info(msg)
-        print('Try angular distance larger than d={:.4f}\"\n'.format(sep2d.arcsec[0]))
+        if verbose:
+            print(msg)
+            print('Try angular distance larger than d={:.4f}\"\n'.format(sep2d.arcsec[0]))
         return None
 
 def get_rv(res, col, outdir=None, return_fp=True):
@@ -152,17 +155,13 @@ def get_rv(res, col, outdir=None, return_fp=True):
     assert col in ALL_DATA_PRODUCTS, msg
     assert isinstance(res,pd.Series)
 
+    # errmsg = "There are multiple targets provided"
+    # assert len(res['Target'].unique())<2, errmsg
     targetname = res['Target']
     if outdir is None:
         outdir = targetname
     else:
-        #save with folder name==ticid
-        if res['ticid'] is not None:
-            outdir = join(outdir,'tic'+str(res['ticid']))
-#         elif res['toi'] is not None:
-#             outdir = join(outdir,str(res['toi']).split('.')[0])
-        else:
-            outdir = join(outdir,targetname)
+        outdir = join(outdir,targetname)
     if not isdir(outdir):
         makedirs(outdir)
 
@@ -171,9 +170,8 @@ def get_rv(res, col, outdir=None, return_fp=True):
     else:
         folder = res['Target']+'_RVs'
         filename = res[col]
-        assert filename.split('.')[-1]=='vels'
-        url = join(BASE,folder,filename)
-        fp = join(outdir,'tic'+str(res['ticid'])+'_'+filename)
+        url = join(BASE,'Ver_02',folder,filename)
+        fp = join(outdir,filename)
         rv = ascii.read(url).to_pandas()
 #         rv.columns = 'BJD RV RV_err'.split()
         if return_fp:
@@ -384,7 +382,7 @@ def save_tics(outdir='.'):
     print('Saved: {}'.format(fp))
     return None
 
-def plot_fov(target_coord,res,fov_rad=60*u.arcsec,ang_dist=15*u.arcsec,
+def plot_fov(target_coord,res,name=None,fov_rad=60*u.arcsec,ang_dist=15*u.arcsec,
              survey='DSS',verbose=True,outdir=None,savefig=False):
     """Plot FOV indicating the query position (magenta reticle) and nearby HARPS
     target (colored triangle), query radius (green circle) and Gaia DR2 sources
@@ -411,24 +409,13 @@ def plot_fov(target_coord,res,fov_rad=60*u.arcsec,ang_dist=15*u.arcsec,
 
     Returns
     -------
-    res : pandas.DataFrame
-        masked dataframe
+    fig 
     """
     if verbose:
         print('\nGenerating FOV ...\n')
-
+        
     nearest_obj = res['Target'].values[0]
-    tic = res['ticid'].values[0]
-    if outdir is None:
-        outdir = nearest_obj
-    else:
-        #save with folder name==ticid
-        if len(res['ticid'].dropna())>0:
-            outdir = join(outdir,'tic'+str(tic))
-#         elif res['toi'] is not None:
-#             outdir = join(outdir,str(res['toi']).split('.')[0])
-        else:
-            outdir = join(outdir,nearest_obj)
+    outdir = join(outdir, f'{name}_{nearest_obj}')
     if not isdir(outdir):
         makedirs(outdir)
 
@@ -479,10 +466,12 @@ def plot_fov(target_coord,res,fov_rad=60*u.arcsec,ang_dist=15*u.arcsec,
     by_label = OrderedDict(zip(labels, handles))
     pl.legend(by_label.values(), by_label.keys())
     if savefig:
-        fp = join(outdir,'tic{}_{}_fov.png'.format(tic,nearest_obj))
-        ax.figure.savefig(fp,bbox_inches='tight')
+        fp = join(outdir, f'{name}_{nearest_obj}_fov.png')
+        ax.figure.savefig(fp, bbox_inches='tight')
         print('Saved: {}'.format(fp))
-    return None
+        pl.close()
+    else:
+        return ax.figure
 
 def summarize_match_table(tics=None,outdir='../all_tois/',save_csv=True,verbose=True):
     """Given TIC IDs, a table TOI parameters from TESS releases is returned
